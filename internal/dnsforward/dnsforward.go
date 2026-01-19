@@ -386,7 +386,7 @@ func (s *Server) Exchange(ip netip.Addr) (host string, ttl time.Duration, err er
 
 	var resolver *proxy.Proxy
 	var errMsg string
-	if s.privateNets.Contains(ip.AsSlice()) {
+	if s.privateNets.Contains(ip) {
 		if !s.conf.UsePrivateRDNS {
 			return "", 0, nil
 		}
@@ -458,7 +458,7 @@ func (s *Server) Start() error {
 // startLocked starts the DNS server without locking.  s.serverLock is expected
 // to be locked.
 func (s *Server) startLocked() error {
-	err := s.dnsProxy.Start()
+	err := s.dnsProxy.Start(context.Background())
 	if err == nil {
 		s.isRunning = true
 	}
@@ -697,27 +697,20 @@ func (s *Server) prepareInternalProxy() (err error) {
 		CacheEnabled:   true,
 		CacheSizeBytes: 4096,
 		UpstreamConfig: srvConf.UpstreamConfig,
-		MaxGoroutines:  int(s.conf.MaxGoroutines),
+		MaxGoroutines:  uint(s.conf.MaxGoroutines),
 	}
 
 	setProxyUpstreamMode(
 		conf,
 		srvConf.AllServers,
 		srvConf.FastestAddr,
-		srvConf.FastestTimeout.Duration,
+		time.Duration(srvConf.FastestTimeout),
 	)
 
 	// TODO(a.garipov): Make a proper constructor for proxy.Proxy.
-	p := &proxy.Proxy{
+	s.internalProxy = &proxy.Proxy{
 		Config: *conf,
 	}
-
-	err = p.Init()
-	if err != nil {
-		return err
-	}
-
-	s.internalProxy = p
 
 	return nil
 }
@@ -738,7 +731,7 @@ func (s *Server) stopLocked() (err error) {
 	// [upstream.Upstream] implementations.
 
 	if s.dnsProxy != nil {
-		err = s.dnsProxy.Stop()
+		err = s.dnsProxy.Shutdown(context.Background())
 		if err != nil {
 			log.Error("dnsforward: closing primary resolvers: %s", err)
 		}

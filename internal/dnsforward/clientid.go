@@ -171,12 +171,11 @@ func clientServerName(pctx *proxy.DNSContext, proto proxy.Proto) (srvName string
 		}
 	case proxy.ProtoQUIC:
 		qConn := pctx.QUICConnection
-		conn, ok := qConn.(quicConnection)
-		if !ok {
-			return "", fmt.Errorf("pctx conn of proto %s is %T, want quic.Connection", proto, qConn)
+		if qConn == nil {
+			return "", fmt.Errorf("pctx conn of proto %s is nil", proto)
 		}
 
-		srvName = conn.ConnectionState().TLS.ServerName
+		srvName = qConn.ConnectionState().TLS.ServerName
 	case proxy.ProtoTLS:
 		conn := pctx.Conn
 		tc, ok := conn.(tlsConn)

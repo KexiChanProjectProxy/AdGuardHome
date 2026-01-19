@@ -116,8 +116,8 @@ func (s *Server) logQuery(dctx *dnsContext, ip net.IP, processingTime time.Durat
 
 	if pctx.Upstream != nil {
 		p.Upstream = pctx.Upstream.Address()
-	} else if cachedUps := pctx.CachedUpstreamAddr; cachedUps != "" {
-		p.Upstream = pctx.CachedUpstreamAddr
+	} else {
+		// In the new dnsproxy API, if Upstream is nil, it means the response was cached
 		p.Cached = true
 	}
 

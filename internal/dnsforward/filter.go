@@ -21,10 +21,10 @@ import (
 func (s *Server) beforeRequestHandler(
 	_ *proxy.Proxy,
 	pctx *proxy.DNSContext,
-) (reply bool, err error) {
+) (err error) {
 	clientID, err := s.clientIDFromDNSContext(pctx)
 	if err != nil {
-		return false, fmt.Errorf("getting clientid: %w", err)
+		return fmt.Errorf("getting clientid: %w", err)
 	}
 
 	blocked, _ := s.IsBlockedClient(pctx.Addr.Addr(), clientID)
@@ -49,7 +49,12 @@ func (s *Server) beforeRequestHandler(
 		s.clientIDCache.Set(key[:], []byte(clientID))
 	}
 
-	return true, nil
+	return nil
+}
+
+// HandleBefore implements the proxy.BeforeRequestHandler interface for Server.
+func (s *Server) HandleBefore(p *proxy.Proxy, dctx *proxy.DNSContext) (err error) {
+	return s.beforeRequestHandler(p, dctx)
 }
 
 // clientRequestFilteringSettings looks up client filtering settings using the

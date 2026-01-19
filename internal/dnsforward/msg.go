@@ -1,6 +1,7 @@
 package dnsforward
 
 import (
+	"fmt"
 	"net/netip"
 
 	"github.com/AdguardTeam/AdGuardHome/internal/filtering"
@@ -310,16 +311,19 @@ func (s *Server) genBlockedHost(request *dns.Msg, newAddr string, d *proxy.DNSCo
 
 // preBlockedResponse returns a protocol-appropriate response for a request that
 // was blocked by access settings.
-func (s *Server) preBlockedResponse(pctx *proxy.DNSContext) (reply bool, err error) {
+func (s *Server) preBlockedResponse(pctx *proxy.DNSContext) (err error) {
 	if pctx.Proto == proxy.ProtoUDP || pctx.Proto == proxy.ProtoDNSCrypt {
 		// Return nil so that dnsproxy drops the connection and thus
 		// prevent DNS amplification attacks.
-		return false, nil
+		return nil
 	}
 
-	pctx.Res = s.makeResponseREFUSED(pctx.Req)
+	resp := s.makeResponseREFUSED(pctx.Req)
 
-	return true, nil
+	return &proxy.BeforeRequestError{
+		Err:      fmt.Errorf("request blocked by access settings"),
+		Response: resp,
+	}
 }
 
 // Create REFUSED DNS response

@@ -25,6 +25,7 @@ import (
 	"github.com/AdguardTeam/golibs/timeutil"
 	"github.com/ameshkov/dnscrypt/v2"
 	"golang.org/x/exp/slices"
+	"gopkg.in/yaml.v3"
 )
 
 // ClientsContainer provides information about preconfigured DNS clients.
@@ -177,6 +178,11 @@ type Config struct {
 
 	// FakeIP configuration
 
+	// FakeIPConfigFile specifies path to external YAML file for FakeIP configuration.
+	// If set, this takes precedence over inline fakeip_* settings below.
+	// The file should contain: enabled, from, domain_suffix, ipv4_range, ipv6_range, ttl
+	FakeIPConfigFile string `yaml:"fakeip_config_file"`
+
 	// FakeIPEnabled, if true, enables FakeIP functionality.
 	FakeIPEnabled bool `yaml:"fakeip_enabled"`
 
@@ -316,9 +322,59 @@ type ServerConfig struct {
 	ServePlainDNS bool
 }
 
+// fakeIPHandlerChain chains FakeIP handler with another BeforeRequestHandler
+type fakeIPHandlerChain struct {
+	fakeIPHandler   *proxy.FakeIPHandler
+	originalHandler proxy.BeforeRequestHandler
+}
+
+// HandleBefore implements the proxy.BeforeRequestHandler interface
+func (c *fakeIPHandlerChain) HandleBefore(p *proxy.Proxy, dctx *proxy.DNSContext) (err error) {
+	// Try FakeIP handler first
+	err = c.fakeIPHandler.HandleBefore(p, dctx)
+	if err != nil {
+		// FakeIP handled it (returned response via BeforeRequestError)
+		return err
+	}
+
+	// FakeIP didn't handle it, call original handler
+	if c.originalHandler != nil {
+		return c.originalHandler.HandleBefore(p, dctx)
+	}
+
+	return nil
+}
+
+// parseTrustedProxies parses trusted proxy CIDR strings into a SubnetSet
+func parseTrustedProxies(strs []string) (ss netutil.SubnetSet, err error) {
+	if len(strs) == 0 {
+		return nil, nil
+	}
+
+	prefixes := make([]netip.Prefix, 0, len(strs))
+	for _, s := range strs {
+		var p netip.Prefix
+		p, err = netip.ParsePrefix(s)
+		if err != nil {
+			return nil, fmt.Errorf("parsing trusted proxy %q: %w", s, err)
+		}
+		prefixes = append(prefixes, p)
+	}
+
+	return netutil.SliceSubnetSet(prefixes), nil
+}
+
 // newProxyConfig creates and validates configuration for the main proxy.
 func (s *Server) newProxyConfig() (conf *proxy.Config, err error) {
 	srvConf := s.conf
+
+	// Parse trusted proxies
+	var trustedProxies netutil.SubnetSet
+	trustedProxies, err = parseTrustedProxies(srvConf.TrustedProxies)
+	if err != nil {
+		return nil, fmt.Errorf("trusted proxies: %w", err)
+	}
+
 	conf = &proxy.Config{
 		HTTP3:                  srvConf.ServeHTTP3,
 		Ratelimit:              int(srvConf.Ratelimit),
@@ -326,16 +382,16 @@ func (s *Server) newProxyConfig() (conf *proxy.Config, err error) {
 		RatelimitSubnetLenIPv6: srvConf.RatelimitSubnetLenIPv6,
 		RatelimitWhitelist:     srvConf.RatelimitWhitelist,
 		RefuseAny:              srvConf.RefuseAny,
-		TrustedProxies:         srvConf.TrustedProxies,
+		TrustedProxies:         trustedProxies,
 		CacheMinTTL:            srvConf.CacheMinTTL,
 		CacheMaxTTL:            srvConf.CacheMaxTTL,
 		CacheOptimistic:        srvConf.CacheOptimistic,
 		UpstreamConfig:         srvConf.UpstreamConfig,
-		BeforeRequestHandler:   s.beforeRequestHandler,
+		BeforeRequestHandler:   s,  // Server implements BeforeRequestHandler interface
 		RequestHandler:         s.handleDNSRequest,
 		HTTPSServerName:        aghhttp.UserAgent(),
 		EnableEDNSClientSubnet: srvConf.EDNSClientSubnet.Enabled,
-		MaxGoroutines:          int(srvConf.MaxGoroutines),
+		MaxGoroutines:          uint(srvConf.MaxGoroutines),
 		UseDNS64:               srvConf.UseDNS64,
 		DNS64Prefs:             srvConf.DNS64Prefixes,
 	}
@@ -410,14 +466,53 @@ func parseBogusNXDOMAIN(confBogusNXDOMAIN []string) (subnets []netip.Prefix, err
 func (s *Server) prepareFakeIP(conf *proxy.Config) (err error) {
 	srvConf := s.conf
 
-	if !srvConf.FakeIPEnabled {
+	// Determine config source: external file or inline config
+	var enabled bool
+	var from []string
+	var domainSuffix []string
+	var ipv4Range string
+	var ipv6Range string
+	var ttl uint32
+
+	// Check if external config file is specified
+	if srvConf.FakeIPConfigFile != "" {
+		log.Info("dnsforward: loading fakeip config from external file: %s", srvConf.FakeIPConfigFile)
+
+		data, readErr := os.ReadFile(srvConf.FakeIPConfigFile)
+		if readErr != nil {
+			return fmt.Errorf("reading fakeip config file %q: %w", srvConf.FakeIPConfigFile, readErr)
+		}
+
+		var extConf fakeIPExternalConfig
+		err = yaml.Unmarshal(data, &extConf)
+		if err != nil {
+			return fmt.Errorf("parsing fakeip config file %q: %w", srvConf.FakeIPConfigFile, err)
+		}
+
+		enabled = extConf.Enabled
+		from = extConf.From
+		domainSuffix = extConf.DomainSuffix
+		ipv4Range = extConf.IPv4Range
+		ipv6Range = extConf.IPv6Range
+		ttl = extConf.TTL
+	} else {
+		// Use inline configuration
+		enabled = srvConf.FakeIPEnabled
+		from = srvConf.FakeIPFrom
+		domainSuffix = srvConf.FakeIPDomainSuffix
+		ipv4Range = srvConf.FakeIPIPv4Range
+		ipv6Range = srvConf.FakeIPIPv6Range
+		ttl = srvConf.FakeIPTTL
+	}
+
+	if !enabled {
 		return nil
 	}
 
 	fakeIPConf := &proxy.FakeIPConfig{
 		Enabled:        true,
-		TTL:            srvConf.FakeIPTTL,
-		DomainSuffixes: srvConf.FakeIPDomainSuffix,
+		TTL:            ttl,
+		DomainSuffixes: domainSuffix,
 	}
 
 	// Default TTL if not specified
@@ -426,8 +521,8 @@ func (s *Server) prepareFakeIP(conf *proxy.Config) (err error) {
 	}
 
 	// Parse source IP ranges ("from")
-	fakeIPConf.SourceRanges = make([]netip.Prefix, 0, len(srvConf.FakeIPFrom))
-	for i, cidr := range srvConf.FakeIPFrom {
+	fakeIPConf.SourceRanges = make([]netip.Prefix, 0, len(from))
+	for i, cidr := range from {
 		var prefix netip.Prefix
 		prefix, err = aghnet.ParseSubnet(cidr)
 		if err != nil {
@@ -438,9 +533,9 @@ func (s *Server) prepareFakeIP(conf *proxy.Config) (err error) {
 	}
 
 	// Parse IPv4 pool
-	if srvConf.FakeIPIPv4Range != "" {
+	if ipv4Range != "" {
 		var prefix netip.Prefix
-		prefix, err = aghnet.ParseSubnet(srvConf.FakeIPIPv4Range)
+		prefix, err = aghnet.ParseSubnet(ipv4Range)
 		if err != nil {
 			return fmt.Errorf("parsing fakeip_ipv4_range: %w", err)
 		}
@@ -453,9 +548,9 @@ func (s *Server) prepareFakeIP(conf *proxy.Config) (err error) {
 	}
 
 	// Parse IPv6 pool
-	if srvConf.FakeIPIPv6Range != "" {
+	if ipv6Range != "" {
 		var prefix netip.Prefix
-		prefix, err = aghnet.ParseSubnet(srvConf.FakeIPIPv6Range)
+		prefix, err = aghnet.ParseSubnet(ipv6Range)
 		if err != nil {
 			return fmt.Errorf("parsing fakeip_ipv6_range: %w", err)
 		}
@@ -483,20 +578,9 @@ func (s *Server) prepareFakeIP(conf *proxy.Config) (err error) {
 	originalHandler := conf.BeforeRequestHandler
 
 	// Wrap handlers: FakeIP runs first, then originalHandler if FakeIP doesn't handle it
-	conf.BeforeRequestHandler = func(p *proxy.Proxy, dctx *proxy.DNSContext) (err error) {
-		// Try FakeIP handler first
-		err = fakeIPHandler.HandleBefore(p, dctx)
-		if err != nil {
-			// FakeIP handled it (returned response via BeforeRequestError)
-			return err
-		}
-
-		// FakeIP didn't handle it, call original handler
-		if originalHandler != nil {
-			return originalHandler.HandleBefore(p, dctx)
-		}
-
-		return nil
+	conf.BeforeRequestHandler = &fakeIPHandlerChain{
+		fakeIPHandler:   fakeIPHandler,
+		originalHandler: originalHandler,
 	}
 
 	log.Info(

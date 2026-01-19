@@ -196,7 +196,8 @@ func (s *Server) processInitial(dctx *dnsContext) (rc resultCode) {
 	q := pctx.Req.Question[0]
 	qt := q.Qtype
 	if s.conf.AAAADisabled && qt == dns.TypeAAAA {
-		_ = proxy.CheckDisabledAAAARequest(pctx, true)
+		// Return empty NODATA response for disabled AAAA requests
+		pctx.Res = s.newMsgNODATA(pctx.Req)
 
 		return resultCodeFinish
 	}
@@ -350,7 +351,7 @@ func (s *Server) processDetermineLocal(dctx *dnsContext) (rc resultCode) {
 
 	rc = resultCodeSuccess
 
-	dctx.isLocalClient = s.privateNets.Contains(dctx.proxyCtx.Addr.Addr().AsSlice())
+	dctx.isLocalClient = s.privateNets.Contains(dctx.proxyCtx.Addr.Addr())
 
 	return rc
 }
@@ -491,14 +492,8 @@ func extractARPASubnet(domain string) (pref netip.Prefix, err error) {
 		}
 	}
 
-	var subnet *net.IPNet
-	subnet, err = netutil.SubnetFromReversedAddr(domain[idx:])
-	if err != nil {
-		// Don't wrap the error since it's informative enough as is.
-		return netip.Prefix{}, err
-	}
-
-	return netutil.IPNetToPrefixNoMapped(subnet)
+	// Use PrefixFromReversedAddr which directly returns netip.Prefix
+	return netutil.PrefixFromReversedAddr(domain[idx:])
 }
 
 // processRestrictLocal responds with NXDOMAIN to PTR requests for IP addresses
@@ -532,8 +527,7 @@ func (s *Server) processRestrictLocal(dctx *dnsContext) (rc resultCode) {
 	// assume that all the DHCP leases we give are locally served or at least
 	// shouldn't be accessible externally.
 	subnetAddr := subnet.Addr()
-	addrData := subnetAddr.AsSlice()
-	if !s.privateNets.Contains(addrData) {
+	if !s.privateNets.Contains(subnetAddr) {
 		return resultCodeSuccess
 	}
 
@@ -830,7 +824,10 @@ func (s *Server) setCustomUpstream(pctx *proxy.DNSContext, clientID string) {
 	}
 
 	// Use the ClientID first, since it has a higher priority.
-	id := stringutil.Coalesce(clientID, pctx.Addr.Addr().String())
+	id := clientID
+	if id == "" {
+		id = pctx.Addr.Addr().String()
+	}
 	upsConf, err := s.conf.ClientsContainer.UpstreamConfigByID(id, s.bootstrap)
 	if err != nil {
 		log.Error("dnsforward: getting custom upstreams for client %s: %s", id, err)
