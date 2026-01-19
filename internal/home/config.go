@@ -301,7 +301,7 @@ var config = &configuration{
 	AuthBlockMin: 15,
 	HTTPConfig: httpConfig{
 		Address:    netip.AddrPortFrom(netip.IPv4Unspecified(), 3000),
-		SessionTTL: timeutil.Duration{Duration: 30 * timeutil.Day},
+		SessionTTL: timeutil.Duration(30 * timeutil.Day),
 		Pprof: &httpPprofConfig{
 			Enabled: false,
 			Port:    6060,
@@ -317,9 +317,7 @@ var config = &configuration{
 			RefuseAny:              true,
 			AllServers:             false,
 			HandleDDR:              true,
-			FastestTimeout: timeutil.Duration{
-				Duration: fastip.DefaultPingWaitTimeout,
-			},
+			FastestTimeout:         timeutil.Duration(fastip.DefaultPingWaitTimeout),
 
 			TrustedProxies: []string{"127.0.0.0/8", "::1/128"},
 			CacheSize:      4 * 1024 * 1024,
@@ -336,7 +334,7 @@ var config = &configuration{
 			// was later increased to 300 due to https://github.com/AdguardTeam/AdGuardHome/issues/2257
 			MaxGoroutines: 300,
 		},
-		UpstreamTimeout: timeutil.Duration{Duration: dnsforward.DefaultTimeout},
+		UpstreamTimeout: timeutil.Duration(dnsforward.DefaultTimeout),
 		UsePrivateRDNS:  true,
 		ServePlainDNS:   true,
 	},
@@ -348,13 +346,13 @@ var config = &configuration{
 	QueryLog: queryLogConfig{
 		Enabled:     true,
 		FileEnabled: true,
-		Interval:    timeutil.Duration{Duration: 90 * timeutil.Day},
+		Interval:    timeutil.Duration(90 * timeutil.Day),
 		MemSize:     1000,
 		Ignored:     []string{},
 	},
 	Stats: statsConfig{
 		Enabled:  true,
-		Interval: timeutil.Duration{Duration: 1 * timeutil.Day},
+		Interval: timeutil.Duration(1 * timeutil.Day),
 		Ignored:  []string{},
 	},
 	// NOTE: Keep these parameters in sync with the one put into
@@ -509,8 +507,8 @@ func parseConfig() (err error) {
 		return err
 	}
 
-	if config.DNS.UpstreamTimeout.Duration == 0 {
-		config.DNS.UpstreamTimeout = timeutil.Duration{Duration: dnsforward.DefaultTimeout}
+	if config.DNS.UpstreamTimeout == 0 {
+		config.DNS.UpstreamTimeout = timeutil.Duration(dnsforward.DefaultTimeout)
 	}
 
 	err = setContextTLSCipherIDs()
@@ -607,7 +605,7 @@ func (c *configuration) write() (err error) {
 	if Context.stats != nil {
 		statsConf := stats.Config{}
 		Context.stats.WriteDiskConfig(&statsConf)
-		config.Stats.Interval = timeutil.Duration{Duration: statsConf.Limit}
+		config.Stats.Interval = timeutil.Duration(statsConf.Limit)
 		config.Stats.Enabled = statsConf.Enabled
 		config.Stats.Ignored = statsConf.Ignored.Values()
 	}
@@ -618,7 +616,7 @@ func (c *configuration) write() (err error) {
 		config.DNS.AnonymizeClientIP = dc.AnonymizeClientIP
 		config.QueryLog.Enabled = dc.Enabled
 		config.QueryLog.FileEnabled = dc.FileEnabled
-		config.QueryLog.Interval = timeutil.Duration{Duration: dc.RotationIvl}
+		config.QueryLog.Interval = timeutil.Duration(dc.RotationIvl)
 		config.QueryLog.MemSize = dc.MemSize
 		config.QueryLog.Ignored = dc.Ignored.Values()
 	}

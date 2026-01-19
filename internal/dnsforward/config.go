@@ -204,6 +204,16 @@ type Config struct {
 	FakeIPTTL uint32 `yaml:"fakeip_ttl"`
 }
 
+// fakeIPExternalConfig is the structure for external FakeIP configuration file.
+type fakeIPExternalConfig struct {
+	Enabled      bool     `yaml:"enabled"`
+	From         []string `yaml:"from"`
+	DomainSuffix []string `yaml:"domain_suffix"`
+	IPv4Range    string   `yaml:"ipv4_range"`
+	IPv6Range    string   `yaml:"ipv6_range"`
+	TTL          uint32   `yaml:"ttl"`
+}
+
 // EDNSClientSubnet is the settings list for EDNS Client Subnet.
 type EDNSClientSubnet struct {
 	// CustomIP for EDNS Client Subnet.

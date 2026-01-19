@@ -37,7 +37,6 @@ import (
 	"github.com/AdguardTeam/golibs/errors"
 	"github.com/AdguardTeam/golibs/log"
 	"github.com/AdguardTeam/golibs/netutil"
-	"github.com/AdguardTeam/golibs/stringutil"
 	"golang.org/x/exp/slices"
 )
 
@@ -654,7 +653,7 @@ func initUsers() (auth *Auth, err error) {
 		log.Info("authratelimiter is disabled")
 	}
 
-	sessionTTL := config.HTTPConfig.SessionTTL.Seconds()
+	sessionTTL := time.Duration(config.HTTPConfig.SessionTTL).Seconds()
 	auth = InitAuth(sessFilename, config.Users, uint32(sessionTTL), rateLimiter)
 	if auth == nil {
 		return nil, errors.Error("initializing auth module failed")
@@ -740,7 +739,11 @@ func writePIDFile(fn string) bool {
 // initConfigFilename sets up context config file path.  This file path can be
 // overridden by command-line arguments, or is set to default.
 func initConfigFilename(opts options) {
-	Context.configFilename = stringutil.Coalesce(opts.confFilename, "AdGuardHome.yaml")
+	if opts.confFilename != "" {
+		Context.configFilename = opts.confFilename
+	} else {
+		Context.configFilename = "AdGuardHome.yaml"
+	}
 }
 
 // initWorkingDir initializes the workDir.  If no command-line arguments are

@@ -52,7 +52,7 @@ func initDNS() (err error) {
 
 	statsConf := stats.Config{
 		Filename:          filepath.Join(baseDir, "stats.db"),
-		Limit:             config.Stats.Interval.Duration,
+		Limit:             time.Duration(config.Stats.Interval),
 		ConfigModified:    onConfigModified,
 		HTTPRegister:      httpRegister,
 		Enabled:           config.Stats.Enabled,
@@ -77,7 +77,7 @@ func initDNS() (err error) {
 		FindClient:        Context.clients.findMultiple,
 		BaseDir:           baseDir,
 		AnonymizeClientIP: config.DNS.AnonymizeClientIP,
-		RotationIvl:       config.QueryLog.Interval.Duration,
+		RotationIvl:       time.Duration(config.QueryLog.Interval),
 		MemSize:           config.QueryLog.MemSize,
 		Enabled:           config.QueryLog.Enabled,
 		FileEnabled:       config.QueryLog.FileEnabled,
@@ -175,20 +175,24 @@ func parseSubnetSet(nets []string) (s netutil.SubnetSet, err error) {
 		// Use an optimized function-based matcher.
 		return netutil.SubnetSetFunc(netutil.IsLocallyServed), nil
 	case 1:
-		s, err = netutil.ParseSubnet(nets[0])
+		s, err = aghnet.ParseSubnet(nets[0])
 		if err != nil {
 			return nil, err
 		}
 
 		return s, nil
 	default:
-		var nets []*net.IPNet
-		nets, err = netutil.ParseSubnets(config.DNS.PrivateNets...)
-		if err != nil {
-			return nil, err
+		prefixes := make([]netip.Prefix, 0, len(nets))
+		for _, netStr := range config.DNS.PrivateNets {
+			var prefix netip.Prefix
+			prefix, err = aghnet.ParseSubnet(netStr)
+			if err != nil {
+				return nil, err
+			}
+			prefixes = append(prefixes, prefix)
 		}
 
-		return netutil.SliceSubnetSet(nets), nil
+		return netutil.SliceSubnetSet(prefixes), nil
 	}
 }
 
@@ -242,7 +246,7 @@ func newServerConfig(
 		Config:                 fwdConf,
 		TLSConfig:              newDNSTLSConfig(tlsConf, hosts),
 		TLSAllowUnencryptedDoH: tlsConf.AllowUnencryptedDoH,
-		UpstreamTimeout:        dnsConf.UpstreamTimeout.Duration,
+		UpstreamTimeout:        time.Duration(dnsConf.UpstreamTimeout),
 		TLSv12Roots:            Context.tlsRoots,
 		ConfigModified:         onConfigModified,
 		HTTPRegister:           httpReg,

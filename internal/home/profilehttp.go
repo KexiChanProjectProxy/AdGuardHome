@@ -79,7 +79,7 @@ func handlePutProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	lang := profileReq.Language
-	if !allowedLanguages.Has(lang) {
+	if _, ok := allowedLanguages[lang]; !ok {
 		aghhttp.Error(r, w, http.StatusBadRequest, "unknown language: %q", lang)
 
 		return

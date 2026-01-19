@@ -14,7 +14,6 @@ import (
 	"github.com/AdguardTeam/golibs/errors"
 	"github.com/AdguardTeam/golibs/log"
 	"github.com/AdguardTeam/golibs/netutil"
-	"github.com/AdguardTeam/golibs/stringutil"
 	"github.com/miekg/dns"
 )
 
@@ -542,7 +541,7 @@ func (s *Server) processRestrictLocal(dctx *dnsContext) (rc resultCode) {
 	}
 
 	// Do not perform unreversing ever again.
-	dctx.unreversedReqIP = addrData
+	dctx.unreversedReqIP = subnetAddr.AsSlice()
 
 	// There is no need to filter request from external addresses since this
 	// code is only executed when the request is for locally served ARPA

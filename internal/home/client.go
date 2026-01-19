@@ -9,7 +9,7 @@ import (
 	"github.com/AdguardTeam/AdGuardHome/internal/filtering/safesearch"
 	"github.com/AdguardTeam/AdGuardHome/internal/whois"
 	"github.com/AdguardTeam/dnsproxy/proxy"
-	"github.com/AdguardTeam/golibs/stringutil"
+	"golang.org/x/exp/slices"
 )
 
 // Client contains information about persistent clients.
@@ -51,9 +51,9 @@ func (c *Client) ShallowClone() (sh *Client) {
 	clone := *c
 
 	clone.BlockedServices = c.BlockedServices.Clone()
-	clone.IDs = stringutil.CloneSlice(c.IDs)
-	clone.Tags = stringutil.CloneSlice(c.Tags)
-	clone.Upstreams = stringutil.CloneSlice(c.Upstreams)
+	clone.IDs = slices.Clone(c.IDs)
+	clone.Tags = slices.Clone(c.Tags)
+	clone.Upstreams = slices.Clone(c.Upstreams)
 
 	return &clone
 }

@@ -53,7 +53,7 @@ type clientsContainer struct {
 	// ipToRC is the IP address to *RuntimeClient map.
 	ipToRC map[netip.Addr]*RuntimeClient
 
-	allTags *stringutil.Set
+	allTags map[string]struct{}
 
 	// dhcp is the DHCP service implementation.
 	dhcp DHCP
@@ -106,7 +106,10 @@ func (clients *clientsContainer) Init(
 	clients.idIndex = make(map[string]*Client)
 	clients.ipToRC = map[netip.Addr]*RuntimeClient{}
 
-	clients.allTags = stringutil.NewSet(clientTags...)
+	clients.allTags = make(map[string]struct{}, len(clientTags))
+	for _, tag := range clientTags {
+		clients.allTags[tag] = struct{}{}
+	}
 
 	// TODO(e.burkov):  Use [dhcpsvc] implementation when it's ready.
 	clients.dhcp = dhcpServer
@@ -251,7 +254,7 @@ func (clients *clientsContainer) addFromConfig(
 		cli.BlockedServices = o.BlockedServices.Clone()
 
 		for _, t := range o.Tags {
-			if clients.allTags.Has(t) {
+			if _, ok := clients.allTags[t]; ok {
 				cli.Tags = append(cli.Tags, t)
 			} else {
 				log.Info("clients: skipping unknown tag %q", t)
@@ -282,9 +285,9 @@ func (clients *clientsContainer) forConfig() (objs []*clientObject) {
 
 			BlockedServices: cli.BlockedServices.Clone(),
 
-			IDs:       stringutil.CloneSlice(cli.IDs),
-			Tags:      stringutil.CloneSlice(cli.Tags),
-			Upstreams: stringutil.CloneSlice(cli.Upstreams),
+			IDs:       slices.Clone(cli.IDs),
+			Tags:      slices.Clone(cli.Tags),
+			Upstreams: slices.Clone(cli.Upstreams),
 
 			UseGlobalSettings:        !cli.UseOwnSettings,
 			FilteringEnabled:         cli.FilteringEnabled,
@@ -467,7 +470,7 @@ func (clients *clientsContainer) UpstreamConfigByID(
 		upstreams,
 		&upstream.Options{
 			Bootstrap:    bootstrap,
-			Timeout:      config.DNS.UpstreamTimeout.Duration,
+			Timeout:      time.Duration(config.DNS.UpstreamTimeout),
 			HTTPVersions: dnsforward.UpstreamHTTPVersions(config.DNS.UseHTTP3Upstreams),
 			PreferIPv6:   config.DNS.BootstrapPreferIPv6,
 		},
@@ -600,7 +603,7 @@ func (clients *clientsContainer) check(c *Client) (err error) {
 	}
 
 	for _, t := range c.Tags {
-		if !clients.allTags.Has(t) {
+		if _, ok := clients.allTags[t]; !ok {
 			return fmt.Errorf("invalid tag: %q", t)
 		}
 	}

@@ -132,7 +132,7 @@ func (s *Server) updateStats(dctx *dnsContext, clientIP string, processingTime t
 		Domain:         aghnet.NormalizeDomain(pctx.Req.Question[0].Name),
 		Result:         stats.RNotFiltered,
 		ProcessingTime: processingTime,
-		UpstreamTime:   pctx.QueryDuration,
+		UpstreamTime:   0, // QueryDuration is not available in newer dnsproxy API
 	}
 
 	if pctx.Upstream != nil {
