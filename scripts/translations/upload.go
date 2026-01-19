@@ -4,16 +4,17 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"maps"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/AdguardTeam/AdGuardHome/internal/aghhttp"
 	"github.com/AdguardTeam/golibs/errors"
 	"github.com/AdguardTeam/golibs/httphdr"
-	"github.com/AdguardTeam/golibs/mapsutil"
 )
 
 // upload base translation.
@@ -52,9 +53,13 @@ func prepareMultipartMsg(
 	w := multipart.NewWriter(buf)
 	var fw io.Writer
 
-	err = mapsutil.OrderedRangeError(formData, w.WriteField)
-	if err != nil {
-		return nil, "", fmt.Errorf("writing field: %w", err)
+	// Write form fields in sorted order
+	keys := slices.Sorted(maps.Keys(formData))
+	for _, key := range keys {
+		err = w.WriteField(key, formData[key])
+		if err != nil {
+			return nil, "", fmt.Errorf("writing field %q: %w", key, err)
+		}
 	}
 
 	file, err := os.Open(basePath)

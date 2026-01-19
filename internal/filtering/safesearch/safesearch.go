@@ -125,7 +125,7 @@ func (ss *Default) log(level log.Level, msg string, args ...any) {
 // resetEngine creates new engine for provided safe search configuration and
 // sets it in ss.
 func (ss *Default) resetEngine(
-	listID int,
+	listID rules.ListID,
 	conf filtering.SafeSearchConfig,
 ) (err error) {
 	if !conf.Enabled {
@@ -141,13 +141,13 @@ func (ss *Default) resetEngine(
 		}
 	}
 
-	strList := &filterlist.StringRuleList{
+	strList := filterlist.NewString(&filterlist.StringConfig{
 		ID:             listID,
 		RulesText:      sb.String(),
 		IgnoreCosmetic: true,
-	}
+	})
 
-	rs, err := filterlist.NewRuleStorage([]filterlist.RuleList{strList})
+	rs, err := filterlist.NewRuleStorage([]filterlist.Interface{strList})
 	if err != nil {
 		return fmt.Errorf("creating rule storage: %w", err)
 	}
@@ -233,7 +233,7 @@ func (ss *Default) newResult(
 ) (res *filtering.Result, err error) {
 	res = &filtering.Result{
 		Rules: []*filtering.ResultRule{{
-			FilterListID: filtering.SafeSearchListID,
+			FilterListID: int64(filtering.SafeSearchListID),
 		}},
 		Reason:     filtering.FilteredSafeSearch,
 		IsFiltered: true,

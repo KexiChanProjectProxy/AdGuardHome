@@ -6,8 +6,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/AdguardTeam/golibs/container"
 	"github.com/AdguardTeam/golibs/log"
-	"github.com/AdguardTeam/golibs/stringutil"
 	"github.com/AdguardTeam/urlfilter"
 	"github.com/AdguardTeam/urlfilter/filterlist"
 	"github.com/AdguardTeam/urlfilter/rules"
@@ -39,7 +39,7 @@ type DefaultStorage struct {
 	engine *urlfilter.DNSEngine
 
 	// ruleList is the filtering rule ruleList used by the engine.
-	ruleList filterlist.RuleList
+	ruleList filterlist.Interface
 
 	// rewrites stores the rewrite entries from configuration.
 	rewrites []*Item
@@ -85,7 +85,7 @@ func (s *DefaultStorage) MatchRequest(dReq *urlfilter.DNSRequest) (rws []*rules.
 	}
 
 	// TODO(a.garipov): Check cnames for cycles on initialization.
-	cnames := stringutil.NewSet()
+	cnames := container.NewMapSet[string]()
 	host := dReq.Hostname
 	for len(rrules) > 0 && rrules[0].DNSRewrite != nil && rrules[0].DNSRewrite.NewCNAME != "" {
 		rule := rrules[0]
@@ -201,13 +201,13 @@ func (s *DefaultStorage) resetRules() (err error) {
 		rulesText = append(rulesText, rewrite.toRule())
 	}
 
-	strList := &filterlist.StringRuleList{
-		ID:             s.urlFilterID,
+	strList := filterlist.NewString(&filterlist.StringConfig{
+		ID:             rules.ListID(s.urlFilterID),
 		RulesText:      strings.Join(rulesText, "\n"),
 		IgnoreCosmetic: true,
-	}
+	})
 
-	rs, err := filterlist.NewRuleStorage([]filterlist.RuleList{strList})
+	rs, err := filterlist.NewRuleStorage([]filterlist.Interface{strList})
 	if err != nil {
 		return fmt.Errorf("creating list storage: %w", err)
 	}

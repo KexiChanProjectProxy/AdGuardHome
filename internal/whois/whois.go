@@ -17,7 +17,6 @@ import (
 	"github.com/AdguardTeam/golibs/ioutil"
 	"github.com/AdguardTeam/golibs/log"
 	"github.com/AdguardTeam/golibs/netutil"
-	"github.com/AdguardTeam/golibs/stringutil"
 	"github.com/bluele/gcache"
 )
 
@@ -174,7 +173,9 @@ func whoisParse(data []byte, maxLen int) (info map[string]string) {
 			val = trimValue(val, maxLen)
 		case "descr", "netname":
 			key = "orgname"
-			val = stringutil.Coalesce(orgname, val)
+			if orgname != "" {
+				val = orgname
+			}
 			orgname = val
 		case "whois":
 			key = "whois"
@@ -268,7 +269,7 @@ var _ Interface = (*Default)(nil)
 // Process makes WHOIS request and returns WHOIS information or nil.  changed
 // indicates that Info was updated since last request.
 func (w *Default) Process(ctx context.Context, ip netip.Addr) (wi *Info, changed bool) {
-	if netutil.IsSpecialPurposeAddr(ip) {
+	if netutil.IsSpecialPurpose(ip) {
 		return nil, false
 	}
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"math"
 	"net"
 	"net/http"
 	"net/netip"
@@ -20,12 +21,11 @@ import (
 	"github.com/AdguardTeam/AdGuardHome/internal/aghhttp"
 	"github.com/AdguardTeam/AdGuardHome/internal/aghnet"
 	"github.com/AdguardTeam/AdGuardHome/internal/filtering/rulelist"
+	"github.com/AdguardTeam/golibs/container"
 	"github.com/AdguardTeam/golibs/errors"
 	"github.com/AdguardTeam/golibs/hostsfile"
 	"github.com/AdguardTeam/golibs/log"
-	"github.com/AdguardTeam/golibs/mathutil"
 	"github.com/AdguardTeam/golibs/netutil"
-	"github.com/AdguardTeam/golibs/stringutil"
 	"github.com/AdguardTeam/golibs/syncutil"
 	"github.com/AdguardTeam/urlfilter"
 	"github.com/AdguardTeam/urlfilter/filterlist"
@@ -39,7 +39,7 @@ import (
 // Keep in sync with client/src/helpers/constants.js.
 // TODO(d.kolyshev): Add RewritesListID and don't forget to keep in sync.
 const (
-	CustomListID = -iota
+	CustomListID       rules.ListID = math.MaxInt64 - iota
 	SysHostsListID
 	BlockedSvcsListID
 	ParentalListID
@@ -361,7 +361,11 @@ func (r Reason) In(reasons ...Reason) (ok bool) { return slices.Contains(reasons
 
 // SetEnabled sets the status of the *DNSFilter.
 func (d *DNSFilter) SetEnabled(enabled bool) {
-	atomic.StoreUint32(&d.conf.enabled, mathutil.BoolToNumber[uint32](enabled))
+	var val uint32
+	if enabled {
+		val = 1
+	}
+	atomic.StoreUint32(&d.conf.enabled, val)
 }
 
 // Settings returns filtering settings.
@@ -645,15 +649,14 @@ func (d *DNSFilter) matchSysHosts(
 	case dns.TypeA, dns.TypeAAAA:
 		recs = d.conf.EtcHosts.MatchName(host)
 	case dns.TypePTR:
-		var ip net.IP
-		ip, err = netutil.IPFromReversedAddr(host)
+		var addr netip.Addr
+		addr, err = netutil.IPFromReversedAddr(host)
 		if err != nil {
 			log.Debug("filtering: failed to parse PTR record %q: %s", host, err)
 
 			return res, nil
 		}
 
-		addr, _ := netip.AddrFromSlice(ip)
 		recs = d.conf.EtcHosts.MatchAddr(addr)
 	default:
 		log.Debug("filtering: unsupported query type %s", dns.Type(qtype))
@@ -704,7 +707,7 @@ func (d *DNSFilter) processRewrites(host string, qtype uint16) (res Result) {
 
 	res.Reason = Rewritten
 
-	cnames := stringutil.NewSet()
+	cnames := container.NewMapSet[string]()
 	origHost := host
 	for matched && len(rewrites) > 0 && rewrites[0].Type == dns.TypeCNAME {
 		rw := rewrites[0]
@@ -792,15 +795,15 @@ func matchBlockedServicesRules(
 //
 
 func newRuleStorage(filters []Filter) (rs *filterlist.RuleStorage, err error) {
-	lists := make([]filterlist.RuleList, 0, len(filters))
+	lists := make([]filterlist.Interface, 0, len(filters))
 	for _, f := range filters {
 		switch id := int(f.ID); {
 		case len(f.Data) != 0:
-			lists = append(lists, &filterlist.StringRuleList{
-				ID:             id,
+			lists = append(lists, filterlist.NewString(&filterlist.StringConfig{
+				ID:             rules.ListID(id),
 				RulesText:      string(f.Data),
 				IgnoreCosmetic: true,
-			})
+			}))
 		case f.FilePath == "":
 			continue
 		case runtime.GOOS == "windows":
@@ -814,14 +817,18 @@ func newRuleStorage(filters []Filter) (rs *filterlist.RuleStorage, err error) {
 				return nil, fmt.Errorf("reading filter content: %w", err)
 			}
 
-			lists = append(lists, &filterlist.StringRuleList{
-				ID:             id,
+			lists = append(lists, filterlist.NewString(&filterlist.StringConfig{
+				ID:             rules.ListID(id),
 				RulesText:      string(data),
 				IgnoreCosmetic: true,
-			})
+			}))
 		default:
-			var list *filterlist.FileRuleList
-			list, err = filterlist.NewFileRuleList(id, f.FilePath, true)
+			var list *filterlist.File
+			list, err = filterlist.NewFile(&filterlist.FileConfig{
+				Path:           f.FilePath,
+				ID:             rules.ListID(id),
+				IgnoreCosmetic: true,
+			})
 			if errors.Is(err, fs.ErrNotExist) {
 				continue
 			} else if err != nil {
@@ -1180,8 +1187,7 @@ func (d *DNSFilter) periodicallyRefreshFilters(ivl time.Duration) (nextIvl time.
 		ivl = maxInterval
 	} else if isNetErr {
 		ivl *= 2
-		// TODO(s.chzhen):  Use built-in function max in Go 1.21.
-		ivl = mathutil.Max(ivl, maxInterval)
+		ivl = max(ivl, maxInterval)
 	}
 
 	return ivl
@@ -1207,7 +1213,7 @@ func (d *DNSFilter) checkSafeBrowsing(
 	res = Result{
 		Rules: []*ResultRule{{
 			Text:         "adguard-malware-shavar",
-			FilterListID: SafeBrowsingListID,
+			FilterListID: int64(SafeBrowsingListID),
 		}},
 		Reason:     FilteredSafeBrowsing,
 		IsFiltered: true,
@@ -1239,7 +1245,7 @@ func (d *DNSFilter) checkParental(
 	res = Result{
 		Rules: []*ResultRule{{
 			Text:         "parental CATEGORY_BLACKLISTED",
-			FilterListID: ParentalListID,
+			FilterListID: int64(ParentalListID),
 		}},
 		Reason:     FilteredParental,
 		IsFiltered: true,

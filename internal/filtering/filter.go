@@ -12,9 +12,9 @@ import (
 
 	"github.com/AdguardTeam/AdGuardHome/internal/aghrenameio"
 	"github.com/AdguardTeam/AdGuardHome/internal/filtering/rulelist"
+	"github.com/AdguardTeam/golibs/container"
 	"github.com/AdguardTeam/golibs/errors"
 	"github.com/AdguardTeam/golibs/log"
-	"github.com/AdguardTeam/golibs/stringutil"
 	"golang.org/x/exp/slices"
 )
 
@@ -233,7 +233,7 @@ func (d *DNSFilter) loadFilters(array []FilterYAML) {
 }
 
 func deduplicateFilters(filters []FilterYAML) (deduplicated []FilterYAML) {
-	urls := stringutil.NewSet()
+	urls := container.NewMapSet[string]()
 	lastIdx := 0
 
 	for _, filter := range filters {
@@ -608,7 +608,7 @@ func (d *DNSFilter) EnableFilters(async bool) {
 func (d *DNSFilter) enableFiltersLocked(async bool) {
 	filters := make([]Filter, 1, len(d.conf.Filters)+len(d.conf.WhitelistFilters)+1)
 	filters[0] = Filter{
-		ID:   CustomListID,
+		ID:   int64(CustomListID),
 		Data: []byte(strings.Join(d.conf.UserRules, "\n")),
 	}
 

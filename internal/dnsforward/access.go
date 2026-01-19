@@ -9,11 +9,12 @@ import (
 
 	"github.com/AdguardTeam/AdGuardHome/internal/aghalg"
 	"github.com/AdguardTeam/AdGuardHome/internal/aghhttp"
+	"github.com/AdguardTeam/golibs/container"
 	"github.com/AdguardTeam/golibs/log"
-	"github.com/AdguardTeam/golibs/stringutil"
 	"github.com/AdguardTeam/urlfilter"
 	"github.com/AdguardTeam/urlfilter/filterlist"
 	"github.com/AdguardTeam/urlfilter/rules"
+	"golang.org/x/exp/slices"
 )
 
 // unit is a convenient alias for struct{}
@@ -25,8 +26,8 @@ type accessManager struct {
 	allowedIPs map[netip.Addr]unit
 	blockedIPs map[netip.Addr]unit
 
-	allowedClientIDs *stringutil.Set
-	blockedClientIDs *stringutil.Set
+	allowedClientIDs *container.MapSet[string]
+	blockedClientIDs *container.MapSet[string]
 
 	// TODO(s.chzhen):  Use [aghnet.IgnoreEngine].
 	blockedHostsEng *urlfilter.DNSEngine
@@ -42,7 +43,7 @@ func processAccessClients(
 	clientStrs []string,
 	ips map[netip.Addr]unit,
 	nets *[]netip.Prefix,
-	clientIDs *stringutil.Set,
+	clientIDs *container.MapSet[string],
 ) (err error) {
 	for i, s := range clientStrs {
 		var ip netip.Addr
@@ -70,8 +71,8 @@ func newAccessCtx(allowed, blocked, blockedHosts []string) (a *accessManager, er
 		allowedIPs: map[netip.Addr]unit{},
 		blockedIPs: map[netip.Addr]unit{},
 
-		allowedClientIDs: stringutil.NewSet(),
-		blockedClientIDs: stringutil.NewSet(),
+		allowedClientIDs: container.NewMapSet[string](),
+		blockedClientIDs: container.NewMapSet[string](),
 	}
 
 	err = processAccessClients(allowed, a.allowedIPs, &a.allowedNets, a.allowedClientIDs)
@@ -86,15 +87,16 @@ func newAccessCtx(allowed, blocked, blockedHosts []string) (a *accessManager, er
 
 	b := &strings.Builder{}
 	for _, h := range blockedHosts {
-		stringutil.WriteToBuilder(b, strings.ToLower(h), "\n")
+		b.WriteString(strings.ToLower(h))
+		b.WriteString("\n")
 	}
 
-	lists := []filterlist.RuleList{
-		&filterlist.StringRuleList{
+	lists := []filterlist.Interface{
+		filterlist.NewString(&filterlist.StringConfig{
 			ID:             0,
 			RulesText:      b.String(),
 			IgnoreCosmetic: true,
-		},
+		}),
 	}
 
 	rulesStrg, err := filterlist.NewRuleStorage(lists)
@@ -176,9 +178,9 @@ func (s *Server) accessListJSON() (j accessListJSON) {
 	defer s.serverLock.RUnlock()
 
 	return accessListJSON{
-		AllowedClients:    stringutil.CloneSlice(s.conf.AllowedClients),
-		DisallowedClients: stringutil.CloneSlice(s.conf.DisallowedClients),
-		BlockedHosts:      stringutil.CloneSlice(s.conf.BlockedHosts),
+		AllowedClients:    slices.Clone(s.conf.AllowedClients),
+		DisallowedClients: slices.Clone(s.conf.DisallowedClients),
+		BlockedHosts:      slices.Clone(s.conf.BlockedHosts),
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"io/fs"
 	"net/http"
+	"net/http/pprof"
 	"net/netip"
 	"runtime"
 	"sync"
@@ -16,7 +17,6 @@ import (
 	"github.com/AdguardTeam/golibs/errors"
 	"github.com/AdguardTeam/golibs/log"
 	"github.com/AdguardTeam/golibs/netutil"
-	"github.com/AdguardTeam/golibs/pprofutil"
 	"github.com/NYTimes/gziphandler"
 	"github.com/quic-go/quic-go/http3"
 	"golang.org/x/net/http2"
@@ -319,7 +319,11 @@ func startPprof(port uint16) {
 	runtime.SetMutexProfileFraction(1)
 
 	mux := http.NewServeMux()
-	pprofutil.RoutePprof(mux)
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
 	go func() {
 		defer log.OnPanic("pprof server")

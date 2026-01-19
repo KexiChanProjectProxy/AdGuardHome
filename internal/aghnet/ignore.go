@@ -24,11 +24,12 @@ type IgnoreEngine struct {
 // NewIgnoreEngine creates a new instance of the IgnoreEngine and stores the
 // list of rules for ignoring hostnames.
 func NewIgnoreEngine(ignored []string) (e *IgnoreEngine, err error) {
-	ruleList := &filterlist.StringRuleList{
+	ruleList := filterlist.NewString(&filterlist.StringConfig{
 		RulesText:      strings.ToLower(strings.Join(ignored, "\n")),
+		ID:             0,
 		IgnoreCosmetic: true,
-	}
-	ruleStorage, err := filterlist.NewRuleStorage([]filterlist.RuleList{ruleList})
+	})
+	ruleStorage, err := filterlist.NewRuleStorage([]filterlist.Interface{ruleList})
 	if err != nil {
 		return nil, err
 	}

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/AdguardTeam/golibs/stringutil"
+	"github.com/AdguardTeam/golibs/container"
 )
 
 // NormalizeDomain returns a lowercased version of host without the final dot,
@@ -23,8 +23,8 @@ func NormalizeDomain(host string) (norm string) {
 // NewDomainNameSet returns nil and error, if list has duplicate or empty domain
 // name.  Otherwise returns a set, which contains domain names normalized using
 // [NormalizeDomain].
-func NewDomainNameSet(list []string) (set *stringutil.Set, err error) {
-	set = stringutil.NewSet()
+func NewDomainNameSet(list []string) (set *container.MapSet[string], err error) {
+	set = container.NewMapSet[string]()
 
 	for i, host := range list {
 		if host == "" {

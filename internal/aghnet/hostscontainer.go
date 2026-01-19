@@ -237,14 +237,14 @@ type hostsIndex struct {
 
 // walk is a file walking function for hostsIndex.
 func (idx *hostsIndex) walk(r io.Reader) (patterns []string, cont bool, err error) {
-	return nil, true, hostsfile.Parse(idx, r, nil)
+	return nil, true, hostsfile.Parse(context.Background(), idx, r, nil)
 }
 
 // type check
 var _ hostsfile.Set = (*hostsIndex)(nil)
 
 // Add implements the [hostsfile.Set] interface for *hostsIndex.
-func (idx *hostsIndex) Add(rec *hostsfile.Record) {
+func (idx *hostsIndex) Add(ctx context.Context, rec *hostsfile.Record) {
 	idx.addrs[rec.Addr] = append(idx.addrs[rec.Addr], rec)
 	for _, name := range rec.Names {
 		idx.names[name] = append(idx.names[name], rec)
@@ -255,7 +255,7 @@ func (idx *hostsIndex) Add(rec *hostsfile.Record) {
 var _ hostsfile.HandleSet = (*hostsIndex)(nil)
 
 // HandleInvalid implements the [hostsfile.HandleSet] interface for *hostsIndex.
-func (idx *hostsIndex) HandleInvalid(src string, _ []byte, err error) {
+func (idx *hostsIndex) HandleInvalid(ctx context.Context, src string, _ []byte, err error) {
 	lineErr := &hostsfile.LineError{}
 	if !errors.As(err, &lineErr) {
 		// Must not happen if idx passed to [hostsfile.Parse].

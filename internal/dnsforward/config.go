@@ -174,6 +174,28 @@ type Config struct {
 	// BootstrapPreferIPv6, if true, instructs the bootstrapper to prefer IPv6
 	// addresses to IPv4 ones for DoH, DoQ, and DoT.
 	BootstrapPreferIPv6 bool `yaml:"bootstrap_prefer_ipv6"`
+
+	// FakeIP configuration
+
+	// FakeIPEnabled, if true, enables FakeIP functionality.
+	FakeIPEnabled bool `yaml:"fakeip_enabled"`
+
+	// FakeIPFrom is the list of source IP CIDR ranges that trigger FakeIP.
+	// FakeIP is only applied when the DNS client's IP is within these ranges.
+	FakeIPFrom []string `yaml:"fakeip_from"`
+
+	// FakeIPDomainSuffix is the list of domain patterns to match for FakeIP.
+	// Domains matching these suffixes will receive fake IP responses.
+	FakeIPDomainSuffix []string `yaml:"fakeip_domain_suffix"`
+
+	// FakeIPIPv4Range is the IPv4 CIDR range for allocating fake IPs.
+	FakeIPIPv4Range string `yaml:"fakeip_ipv4_range"`
+
+	// FakeIPIPv6Range is the IPv6 CIDR range for allocating fake IPs.
+	FakeIPIPv6Range string `yaml:"fakeip_ipv6_range"`
+
+	// FakeIPTTL is the response TTL in seconds. Default is 30.
+	FakeIPTTL uint32 `yaml:"fakeip_ttl"`
 }
 
 // EDNSClientSubnet is the settings list for EDNS Client Subnet.
@@ -332,12 +354,17 @@ func (s *Server) newProxyConfig() (conf *proxy.Config, err error) {
 		conf,
 		srvConf.AllServers,
 		srvConf.FastestAddr,
-		srvConf.FastestTimeout.Duration,
+		time.Duration(srvConf.FastestTimeout),
 	)
 
 	conf.BogusNXDomain, err = parseBogusNXDOMAIN(srvConf.BogusNXDomain)
 	if err != nil {
 		return nil, fmt.Errorf("bogus_nxdomain: %w", err)
+	}
+
+	err = s.prepareFakeIP(conf)
+	if err != nil {
+		return nil, fmt.Errorf("preparing fakeip: %w", err)
 	}
 
 	err = s.prepareTLS(conf)
@@ -377,6 +404,111 @@ func parseBogusNXDOMAIN(confBogusNXDOMAIN []string) (subnets []netip.Prefix, err
 	}
 
 	return subnets, nil
+}
+
+// prepareFakeIP initializes FakeIP configuration for the proxy.
+func (s *Server) prepareFakeIP(conf *proxy.Config) (err error) {
+	srvConf := s.conf
+
+	if !srvConf.FakeIPEnabled {
+		return nil
+	}
+
+	fakeIPConf := &proxy.FakeIPConfig{
+		Enabled:        true,
+		TTL:            srvConf.FakeIPTTL,
+		DomainSuffixes: srvConf.FakeIPDomainSuffix,
+	}
+
+	// Default TTL if not specified
+	if fakeIPConf.TTL == 0 {
+		fakeIPConf.TTL = 30
+	}
+
+	// Parse source IP ranges ("from")
+	fakeIPConf.SourceRanges = make([]netip.Prefix, 0, len(srvConf.FakeIPFrom))
+	for i, cidr := range srvConf.FakeIPFrom {
+		var prefix netip.Prefix
+		prefix, err = aghnet.ParseSubnet(cidr)
+		if err != nil {
+			return fmt.Errorf("parsing fakeip_from[%d] %q: %w", i, cidr, err)
+		}
+
+		fakeIPConf.SourceRanges = append(fakeIPConf.SourceRanges, prefix)
+	}
+
+	// Parse IPv4 pool
+	if srvConf.FakeIPIPv4Range != "" {
+		var prefix netip.Prefix
+		prefix, err = aghnet.ParseSubnet(srvConf.FakeIPIPv4Range)
+		if err != nil {
+			return fmt.Errorf("parsing fakeip_ipv4_range: %w", err)
+		}
+
+		if !prefix.Addr().Is4() {
+			return errors.Error("fakeip_ipv4_range must be IPv4")
+		}
+
+		fakeIPConf.IPv4Pool = prefix
+	}
+
+	// Parse IPv6 pool
+	if srvConf.FakeIPIPv6Range != "" {
+		var prefix netip.Prefix
+		prefix, err = aghnet.ParseSubnet(srvConf.FakeIPIPv6Range)
+		if err != nil {
+			return fmt.Errorf("parsing fakeip_ipv6_range: %w", err)
+		}
+
+		if !prefix.Addr().Is6() {
+			return errors.Error("fakeip_ipv6_range must be IPv6")
+		}
+
+		fakeIPConf.IPv6Pool = prefix
+	}
+
+	// Validation
+	if len(fakeIPConf.DomainSuffixes) == 0 {
+		return errors.Error("fakeip_domain_suffix must not be empty when fakeip_enabled is true")
+	}
+
+	if !fakeIPConf.IPv4Pool.IsValid() && !fakeIPConf.IPv6Pool.IsValid() {
+		return errors.Error("at least one of fakeip_ipv4_range or fakeip_ipv6_range must be specified")
+	}
+
+	conf.FakeIPConfig = fakeIPConf
+
+	// Create FakeIP handler and chain it with the existing beforeRequestHandler
+	fakeIPHandler := proxy.NewFakeIPHandler(fakeIPConf)
+	originalHandler := conf.BeforeRequestHandler
+
+	// Wrap handlers: FakeIP runs first, then originalHandler if FakeIP doesn't handle it
+	conf.BeforeRequestHandler = func(p *proxy.Proxy, dctx *proxy.DNSContext) (err error) {
+		// Try FakeIP handler first
+		err = fakeIPHandler.HandleBefore(p, dctx)
+		if err != nil {
+			// FakeIP handled it (returned response via BeforeRequestError)
+			return err
+		}
+
+		// FakeIP didn't handle it, call original handler
+		if originalHandler != nil {
+			return originalHandler.HandleBefore(p, dctx)
+		}
+
+		return nil
+	}
+
+	log.Info(
+		"dnsforward: fakeip enabled: ttl=%d, domains=%d, sources=%d, ipv4_pool=%t, ipv6_pool=%t",
+		fakeIPConf.TTL,
+		len(fakeIPConf.DomainSuffixes),
+		len(fakeIPConf.SourceRanges),
+		fakeIPConf.IPv4Pool.IsValid(),
+		fakeIPConf.IPv6Pool.IsValid(),
+	)
+
+	return nil
 }
 
 const defaultBlockedResponseTTL = 3600
