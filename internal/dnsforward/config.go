@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"io"
 	"log/slog"
 	"net"
 	"net/netip"
@@ -971,8 +970,18 @@ func (s *Server) enableProtectionAfterPause() {
 
 // slogLogger creates an slog.Logger for the dnsproxy.
 func (s *Server) slogLogger() *slog.Logger {
-	// Create a logger with a TextHandler that writes to a discard writer
-	// to prevent nil handler panics
-	handler := slog.NewTextHandler(io.Discard, nil)
-	return slog.New(handler)
+	// Create a logger with a TextHandler that writes to stderr
+	// Using stderr instead of io.Discard to ensure the handler is valid
+	opts := &slog.HandlerOptions{
+		Level: slog.LevelError, // Only log errors to reduce noise
+	}
+	handler := slog.NewTextHandler(os.Stderr, opts)
+	logger := slog.New(handler)
+
+	// Defensive check - this should never happen but protects against nil
+	if logger == nil {
+		panic("CRITICAL: failed to create slog.Logger")
+	}
+
+	return logger
 }
