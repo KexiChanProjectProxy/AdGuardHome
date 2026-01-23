@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/netip"
@@ -21,7 +22,6 @@ import (
 	"github.com/AdguardTeam/dnsproxy/upstream"
 	"github.com/AdguardTeam/golibs/errors"
 	"github.com/AdguardTeam/golibs/log"
-	"github.com/AdguardTeam/golibs/logutil/slogutil"
 	"github.com/AdguardTeam/golibs/netutil"
 	"github.com/AdguardTeam/golibs/stringutil"
 	"github.com/AdguardTeam/golibs/timeutil"
@@ -971,5 +971,8 @@ func (s *Server) enableProtectionAfterPause() {
 
 // slogLogger creates an slog.Logger for the dnsproxy.
 func (s *Server) slogLogger() *slog.Logger {
-	return slogutil.NewDiscardLogger()
+	// Create a logger with a TextHandler that writes to a discard writer
+	// to prevent nil handler panics
+	handler := slog.NewTextHandler(io.Discard, nil)
+	return slog.New(handler)
 }
