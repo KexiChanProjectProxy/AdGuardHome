@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/netip"
 	"os"
@@ -20,6 +21,7 @@ import (
 	"github.com/AdguardTeam/dnsproxy/upstream"
 	"github.com/AdguardTeam/golibs/errors"
 	"github.com/AdguardTeam/golibs/log"
+	"github.com/AdguardTeam/golibs/logutil/slogutil"
 	"github.com/AdguardTeam/golibs/netutil"
 	"github.com/AdguardTeam/golibs/stringutil"
 	"github.com/AdguardTeam/golibs/timeutil"
@@ -386,6 +388,7 @@ func (s *Server) newProxyConfig() (conf *proxy.Config, err error) {
 	}
 
 	conf = &proxy.Config{
+		Logger:                 s.slogLogger(),
 		HTTP3:                  srvConf.ServeHTTP3,
 		Ratelimit:              int(srvConf.Ratelimit),
 		RatelimitSubnetLenIPv4: srvConf.RatelimitSubnetLenIPv4,
@@ -964,4 +967,9 @@ func (s *Server) enableProtectionAfterPause() {
 	s.dnsFilter.SetProtectionStatus(true, nil)
 
 	log.Info("dns: protection is restarted after pause")
+}
+
+// slogLogger creates an slog.Logger for the dnsproxy.
+func (s *Server) slogLogger() *slog.Logger {
+	return slogutil.NewDiscardLogger()
 }
