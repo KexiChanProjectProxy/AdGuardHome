@@ -305,7 +305,9 @@ func newDNSTLSConfig(
 	addrs []netip.Addr,
 ) (dnsConf *dnsforward.TLSConfig, err error) {
 	if !conf.Enabled {
-		return &dnsforward.TLSConfig{}, nil
+		return &dnsforward.TLSConfig{
+			DoHURLPrefix: conf.DoHURLPrefix,
+		}, nil
 	}
 
 	dnsCryptConf, err := newDNSCryptConfig(conf, addrs)
