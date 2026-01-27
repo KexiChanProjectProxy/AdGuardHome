@@ -274,7 +274,7 @@ func (web *webAPI) registerAuthHandlers() {
 }
 
 // isPublicResource returns true if p is a path to a public resource.
-func isPublicResource(p string) (ok bool) {
+func isPublicResource(p string, dohPrefix string) (ok bool) {
 	isAsset, err := path.Match("/assets/*", p)
 	if err != nil {
 		// The only error that is returned from path.Match is
@@ -288,13 +288,18 @@ func isPublicResource(p string) (ok bool) {
 		panic(fmt.Errorf("bad login pattern: %w", err))
 	}
 
+	// Default to /dns-query if empty.
+	if dohPrefix == "" {
+		dohPrefix = "/dns-query"
+	}
+
 	// TODO(s.chzhen):  Implement a more strict version.
-	if strings.HasPrefix(p, "/dns-query/") {
+	if strings.HasPrefix(p, dohPrefix+"/") {
 		return true
 	}
 
 	paths := []string{
-		"/dns-query",
+		dohPrefix,
 		"/control/login",
 		"/apple/doh.mobileconfig",
 		"/apple/dot.mobileconfig",
@@ -333,6 +338,9 @@ type authMiddlewareDefaultConfig struct {
 
 	// users contains web user information.  It must not be nil.
 	users aghuser.DB
+
+	// dohPrefix is the URL prefix for DNS-over-HTTPS queries.
+	dohPrefix string
 }
 
 // authMiddlewareDefault is the default authentication middleware.  It searches
@@ -344,6 +352,7 @@ type authMiddlewareDefault struct {
 	trustedProxies netutil.SubnetSet
 	sessions       aghuser.SessionStorage
 	users          aghuser.DB
+	dohPrefix      string
 }
 
 // newAuthMiddlewareDefault returns the new properly initialized
@@ -355,6 +364,7 @@ func newAuthMiddlewareDefault(c *authMiddlewareDefaultConfig) (mw *authMiddlewar
 		trustedProxies: c.trustedProxies,
 		sessions:       c.sessions,
 		users:          c.users,
+		dohPrefix:      c.dohPrefix,
 	}
 }
 
@@ -423,7 +433,7 @@ func (mw *authMiddlewareDefault) handlePublicAccess(
 	h http.Handler,
 	path string,
 ) (ok bool) {
-	if isPublicResource(path) {
+	if isPublicResource(path, mw.dohPrefix) {
 		h.ServeHTTP(w, r)
 
 		return true

@@ -73,7 +73,12 @@ func (s *Server) clientIDFromDNSContext(
 ) (clientID string, err error) {
 	proto := pctx.Proto
 	if proto == proxy.ProtoHTTPS {
-		clientID, err = clientIDFromDNSContextHTTPS(pctx)
+		dohPrefix := s.conf.TLSConf.DoHURLPrefix
+		if dohPrefix == "" {
+			dohPrefix = "/dns-query"
+		}
+
+		clientID, err = clientIDFromDNSContextHTTPS(pctx, dohPrefix)
 		if err != nil {
 			return "", fmt.Errorf("checking url: %w", err)
 		} else if clientID != "" {

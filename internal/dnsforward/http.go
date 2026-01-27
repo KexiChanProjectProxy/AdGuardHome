@@ -870,6 +870,12 @@ func (s *Server) registerHandlers() {
 
 	s.conf.HTTPReg.Register(http.MethodPost, "/control/cache_clear", s.handleCacheClear)
 
+	// Get the configured prefix, default to "/dns-query" if empty.
+	prefix := s.conf.TLSConf.DoHURLPrefix
+	if prefix == "" {
+		prefix = "/dns-query"
+	}
+
 	// Register both versions, with and without the trailing slash, to
 	// prevent a 301 Moved Permanently redirect when clients request the
 	// path without the trailing slash.  Those redirects break some clients.
@@ -877,8 +883,8 @@ func (s *Server) registerHandlers() {
 	// See go doc net/http.ServeMux.
 	//
 	// See also https://github.com/AdguardTeam/AdGuardHome/issues/2628.
-	s.conf.HTTPReg.Register("", "/dns-query", s.handleDoH)
-	s.conf.HTTPReg.Register("", "/dns-query/", s.handleDoH)
+	s.conf.HTTPReg.Register("", prefix, s.handleDoH)
+	s.conf.HTTPReg.Register("", prefix+"/", s.handleDoH)
 
 	webRegistered = true
 }

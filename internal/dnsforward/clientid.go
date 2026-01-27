@@ -51,7 +51,7 @@ func clientIDFromClientServerName(
 
 // clientIDFromDNSContextHTTPS extracts the ClientID from the path of the
 // client's DNS-over-HTTPS request.
-func clientIDFromDNSContextHTTPS(pctx *proxy.DNSContext) (clientID string, err error) {
+func clientIDFromDNSContextHTTPS(pctx *proxy.DNSContext, dohPrefix string) (clientID string, err error) {
 	r := pctx.HTTPRequest
 	if r == nil {
 		return "", fmt.Errorf(
@@ -66,16 +66,32 @@ func clientIDFromDNSContextHTTPS(pctx *proxy.DNSContext) (clientID string, err e
 		parts = parts[1:]
 	}
 
-	if len(parts) == 0 || parts[0] != "dns-query" {
-		return "", fmt.Errorf("clientid check: invalid path %q", origPath)
+	// Split the expected prefix the same way.
+	expectedPrefixParts := strings.Split(path.Clean(dohPrefix), "/")
+	if expectedPrefixParts[0] == "" {
+		expectedPrefixParts = expectedPrefixParts[1:]
 	}
 
-	switch len(parts) {
-	case 1:
-		// Just /dns-query, no ClientID.
+	// Check if the path starts with the expected prefix.
+	if len(parts) < len(expectedPrefixParts) {
+		return "", fmt.Errorf("clientid check: invalid path %q (expected prefix %q)", origPath, dohPrefix)
+	}
+
+	for i, expected := range expectedPrefixParts {
+		if parts[i] != expected {
+			return "", fmt.Errorf("clientid check: invalid path %q (expected prefix %q)", origPath, dohPrefix)
+		}
+	}
+
+	// Calculate the number of parts after the prefix.
+	remainingParts := len(parts) - len(expectedPrefixParts)
+
+	switch remainingParts {
+	case 0:
+		// Just the prefix, no ClientID.
 		return "", nil
-	case 2:
-		clientID = parts[1]
+	case 1:
+		clientID = parts[len(expectedPrefixParts)]
 	default:
 		return "", fmt.Errorf("clientid check: invalid path %q: extra parts", origPath)
 	}

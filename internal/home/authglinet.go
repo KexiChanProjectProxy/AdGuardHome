@@ -58,6 +58,9 @@ type authMiddlewareGLiNetConfig struct {
 	// maxTokenSize is the maximum size of the file containing the
 	// authentication token.  It must be greater than zero.
 	maxTokenSize uint
+
+	// dohPrefix is the URL prefix for DNS-over-HTTPS queries.
+	dohPrefix string
 }
 
 // authMiddlewareGLiNet is the GLiNet authentication middleware.  It checks if
@@ -68,6 +71,7 @@ type authMiddlewareGLiNet struct {
 	tokenFilePrefix string
 	ttl             time.Duration
 	maxTokenSize    uint
+	dohPrefix       string
 }
 
 // newAuthMiddlewareGLiNet returns the new properly initialized
@@ -79,6 +83,7 @@ func newAuthMiddlewareGLiNet(c *authMiddlewareGLiNetConfig) (mw *authMiddlewareG
 		tokenFilePrefix: c.tokenFilePrefix,
 		ttl:             c.ttl,
 		maxTokenSize:    c.maxTokenSize,
+		dohPrefix:       c.dohPrefix,
 	}
 }
 
@@ -92,7 +97,7 @@ func (mw *authMiddlewareGLiNet) Wrap(h http.Handler) (wrapped http.Handler) {
 		ctx := r.Context()
 
 		path := r.URL.Path
-		if isPublicResource(path) {
+		if isPublicResource(path, mw.dohPrefix) {
 			h.ServeHTTP(w, r)
 
 			return

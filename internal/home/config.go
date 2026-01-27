@@ -7,8 +7,10 @@ import (
 	"log/slog"
 	"net/netip"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -318,6 +320,10 @@ type tlsConfigSettings struct {
 	// TODO(s.chzhen):  Add this option into the Web UI.
 	AllowUnencryptedDoH bool `yaml:"allow_unencrypted_doh" json:"allow_unencrypted_doh"`
 
+	// DoHURLPrefix is the URL prefix for DNS-over-HTTPS queries.
+	// If empty, defaults to "/dns-query".
+	DoHURLPrefix string `yaml:"doh_url_prefix" json:"doh_url_prefix"`
+
 	// CertificateChain is the PEM-encoded certificate chain.  Must be empty if
 	// [tlsConfigSettings.CertificatePath] is provided.
 	CertificateChain string `yaml:"certificate_chain" json:"certificate_chain"`
@@ -358,6 +364,7 @@ func (c *tlsConfigSettings) clone() (clone *tlsConfigSettings) {
 	clone.OverrideTLSCiphers = slices.Clone(c.OverrideTLSCiphers)
 	clone.CertificateChainData = slices.Clone(c.CertificateChainData)
 	clone.PrivateKeyData = slices.Clone(c.PrivateKeyData)
+	clone.DoHURLPrefix = c.DoHURLPrefix
 
 	return clone
 }
@@ -495,6 +502,7 @@ var config = &configuration{
 		PortHTTPS:       defaultPortHTTPS,
 		PortDNSOverTLS:  defaultPortTLS, // needs to be passed through to dnsproxy
 		PortDNSOverQUIC: defaultPortQUIC,
+		DoHURLPrefix:    "/dns-query",
 	},
 	QueryLog: queryLogConfig{
 		Enabled:     true,
@@ -699,6 +707,10 @@ func parseConfig(ctx context.Context, l *slog.Logger, workDir, confPath string) 
 		config.DNS.UpstreamTimeout = timeutil.Duration(dnsforward.DefaultTimeout)
 	}
 
+	if config.TLS.DoHURLPrefix == "" {
+		config.TLS.DoHURLPrefix = "/dns-query"
+	}
+
 	// Do not wrap the error because it's informative enough as is.
 	return validateTLSCipherIDs(config.TLS.OverrideTLSCiphers)
 }
@@ -785,6 +797,19 @@ func validateConfig(ctx context.Context, l *slog.Logger, fileData []byte) (err e
 		return fmt.Errorf("validating tcp ports: %w", err)
 	} else if err = udpPorts.Validate(); err != nil {
 		return fmt.Errorf("validating udp ports: %w", err)
+	}
+
+	// Validate DoH URL prefix.
+	if config.TLS.DoHURLPrefix != "" {
+		if !strings.HasPrefix(config.TLS.DoHURLPrefix, "/") {
+			return errors.Error("tls: doh_url_prefix must start with '/'")
+		}
+
+		// Clean the path to prevent .. traversal.
+		cleaned := path.Clean(config.TLS.DoHURLPrefix)
+		if cleaned != config.TLS.DoHURLPrefix {
+			return fmt.Errorf("tls: doh_url_prefix contains invalid path: %q", config.TLS.DoHURLPrefix)
+		}
 	}
 
 	if !filtering.ValidateUpdateIvl(config.Filtering.FiltersUpdateIntervalHours) {

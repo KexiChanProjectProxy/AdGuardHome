@@ -213,6 +213,10 @@ type TLSConfig struct {
 	// StrictSNICheck controls if the connections with SNI mismatching the
 	// certificate's ones should be rejected.
 	StrictSNICheck bool
+
+	// DoHURLPrefix is the URL prefix for DNS-over-HTTPS queries.
+	// Must not be empty and must start with "/".
+	DoHURLPrefix string
 }
 
 // DNSCryptConfig contains the configuration settings for a DNSCrypt server.

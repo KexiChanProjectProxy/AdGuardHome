@@ -1062,6 +1062,7 @@ func initUsers(
 		dbFilename:     filepath.Join(dataDirPath, sessionsDBName),
 		users:          config.Users,
 		sessionTTL:     time.Duration(config.HTTPConfig.SessionTTL),
+		dohPrefix:      config.TLS.DoHURLPrefix,
 		isGLiNet:       isGLiNet,
 	})
 	if err != nil {

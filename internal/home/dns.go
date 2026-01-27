@@ -318,6 +318,7 @@ func newDNSTLSConfig(
 		DNSCryptConf:   dnsCryptConf,
 		ServerName:     conf.ServerName,
 		StrictSNICheck: conf.StrictSNICheck,
+		DoHURLPrefix:   conf.DoHURLPrefix,
 	}
 
 	if conf.PortHTTPS != 0 {
@@ -416,7 +417,7 @@ func getDNSEncryption(tlsMgr *tlsManager) (de dnsEncryption) {
 		de.https = (&url.URL{
 			Scheme: urlutil.SchemeHTTPS,
 			Host:   addr,
-			Path:   "/dns-query",
+			Path:   tlsConf.DoHURLPrefix,
 		}).String()
 	}
 

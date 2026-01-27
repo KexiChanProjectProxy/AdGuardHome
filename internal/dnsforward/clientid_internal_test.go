@@ -301,7 +301,7 @@ func TestClientIDFromDNSContextHTTPS(t *testing.T) {
 		path:         "/foo",
 		cliSrvName:   "example.com",
 		wantClientID: "",
-		wantErrMsg:   `clientid check: invalid path "/foo"`,
+		wantErrMsg:   `clientid check: invalid path "/foo" (expected prefix "/dns-query")`,
 	}, {
 		name:         "extra",
 		path:         "/dns-query/cli/foo",
@@ -340,7 +340,78 @@ func TestClientIDFromDNSContextHTTPS(t *testing.T) {
 				HTTPRequest: r,
 			}
 
-			clientID, err := clientIDFromDNSContextHTTPS(pctx)
+			clientID, err := clientIDFromDNSContextHTTPS(pctx, "/dns-query")
+			assert.Equal(t, tc.wantClientID, clientID)
+
+			testutil.AssertErrorMsg(t, tc.wantErrMsg, err)
+		})
+	}
+}
+
+func TestClientIDFromDNSContextHTTPSCustomPrefix(t *testing.T) {
+	testCases := []struct {
+		name         string
+		path         string
+		dohPrefix    string
+		cliSrvName   string
+		wantClientID string
+		wantErrMsg   string
+	}{{
+		name:         "custom_prefix_no_clientid",
+		path:         "/api/dns",
+		dohPrefix:    "/api/dns",
+		cliSrvName:   "example.com",
+		wantClientID: "",
+		wantErrMsg:   "",
+	}, {
+		name:         "custom_prefix_with_clientid",
+		path:         "/api/dns/cli",
+		dohPrefix:    "/api/dns",
+		cliSrvName:   "example.com",
+		wantClientID: "cli",
+		wantErrMsg:   "",
+	}, {
+		name:         "custom_prefix_nested_no_clientid",
+		path:         "/very/long/path",
+		dohPrefix:    "/very/long/path",
+		cliSrvName:   "example.com",
+		wantClientID: "",
+		wantErrMsg:   "",
+	}, {
+		name:         "custom_prefix_nested_with_clientid",
+		path:         "/very/long/path/cli",
+		dohPrefix:    "/very/long/path",
+		cliSrvName:   "example.com",
+		wantClientID: "cli",
+		wantErrMsg:   "",
+	}, {
+		name:         "wrong_prefix",
+		path:         "/dns-query/cli",
+		dohPrefix:    "/api/dns",
+		cliSrvName:   "example.com",
+		wantClientID: "",
+		wantErrMsg:   `clientid check: invalid path "/dns-query/cli" (expected prefix "/api/dns")`,
+	}}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			connState := &tls.ConnectionState{
+				ServerName: tc.cliSrvName,
+			}
+
+			r := &http.Request{
+				URL: &url.URL{
+					Path: tc.path,
+				},
+				TLS: connState,
+			}
+
+			pctx := &proxy.DNSContext{
+				Proto:       proxy.ProtoHTTPS,
+				HTTPRequest: r,
+			}
+
+			clientID, err := clientIDFromDNSContextHTTPS(pctx, tc.dohPrefix)
 			assert.Equal(t, tc.wantClientID, clientID)
 
 			testutil.AssertErrorMsg(t, tc.wantErrMsg, err)

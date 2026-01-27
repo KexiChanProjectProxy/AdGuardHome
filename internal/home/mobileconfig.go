@@ -90,7 +90,7 @@ const (
 	dnsProtoTLS   = "TLS"
 )
 
-func encodeMobileConfig(d *dnsSettings, clientID string) ([]byte, error) {
+func encodeMobileConfig(d *dnsSettings, clientID string, dohPrefix string) ([]byte, error) {
 	var dspName string
 	switch proto := d.DNSProtocol; proto {
 	case dnsProtoHTTPS:
@@ -98,7 +98,7 @@ func encodeMobileConfig(d *dnsSettings, clientID string) ([]byte, error) {
 		u := &url.URL{
 			Scheme: urlutil.SchemeHTTPS,
 			Host:   d.ServerName,
-			Path:   path.Join("/dns-query", clientID),
+			Path:   path.Join(dohPrefix, clientID),
 		}
 		d.ServerURL = u.String()
 
@@ -180,7 +180,12 @@ func handleMobileConfig(w http.ResponseWriter, r *http.Request, dnsp string) {
 		ServerName:  host,
 	}
 
-	mobileconfig, err := encodeMobileConfig(d, clientID)
+	dohPrefix := config.TLS.DoHURLPrefix
+	if dohPrefix == "" {
+		dohPrefix = "/dns-query"
+	}
+
+	mobileconfig, err := encodeMobileConfig(d, clientID, dohPrefix)
 	if err != nil {
 		respondJSONError(w, http.StatusInternalServerError, err.Error())
 

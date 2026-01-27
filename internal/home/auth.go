@@ -69,6 +69,9 @@ type authConfig struct {
 	// sessionTTL is the TTL (Time To Live) for web user sessions.
 	sessionTTL time.Duration
 
+	// dohPrefix is the URL prefix for DNS-over-HTTPS queries.
+	dohPrefix string
+
 	// isGLiNet indicates whether GLiNet mode is enabled.
 	isGLiNet bool
 }
@@ -89,6 +92,9 @@ type auth struct {
 
 	// users stores user credentials.
 	users aghuser.DB
+
+	// dohPrefix is the URL prefix for DNS-over-HTTPS queries.
+	dohPrefix string
 
 	// isGLiNet indicates whether GLiNet mode is enabled.
 	isGLiNet bool
@@ -125,6 +131,7 @@ func newAuth(ctx context.Context, conf *authConfig) (a *auth, err error) {
 		trustedProxies: conf.trustedProxies,
 		sessions:       s,
 		users:          userDB,
+		dohPrefix:      conf.dohPrefix,
 		isGLiNet:       conf.isGLiNet,
 		isUserless:     len(conf.users) == 0,
 	}, nil
@@ -139,6 +146,7 @@ func (a *auth) middleware() (mw httputil.Middleware) {
 			tokenFilePrefix: glFilePrefix,
 			ttl:             glTokenTimeout,
 			maxTokenSize:    MaxFileSize,
+			dohPrefix:       a.dohPrefix,
 		})
 	}
 
@@ -148,6 +156,7 @@ func (a *auth) middleware() (mw httputil.Middleware) {
 		trustedProxies: a.trustedProxies,
 		sessions:       a.sessions,
 		users:          a.users,
+		dohPrefix:      a.dohPrefix,
 	})
 }
 
