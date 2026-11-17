@@ -102,6 +102,22 @@ const Examples = (props: ExamplesProps) => (
             </li>
 
             <li>
+                <code>anytls://password@example.org:443?sni=example.org</code>:{' '}
+                <Trans
+                    components={[
+                        <a
+                            href="https://github.com/anytls/anytls-go"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            key="0">
+                            AnyTLS
+                        </a>,
+                    ]}>
+                    example_upstream_anytls
+                </Trans>
+            </li>
+
+            <li>
                 <code>sdns://...</code>:{' '}
                 <Trans
                     components={[
