@@ -8,6 +8,7 @@ require (
 	github.com/AdguardTeam/golibs v0.35.15
 	github.com/AdguardTeam/urlfilter v0.23.4
 	github.com/NYTimes/gziphandler v1.1.1
+	github.com/anytls/sing-anytls v0.0.13
 	github.com/bluele/gcache v0.0.2
 	github.com/c2h5oh/datasize v0.0.0-20231215233829-aa82cc1e6500
 	github.com/digineo/go-ipset/v2 v2.2.1
@@ -33,6 +34,7 @@ require (
 	github.com/mdlayher/raw v0.1.0
 	github.com/miekg/dns v1.1.72
 	github.com/quic-go/quic-go v0.60.0
+	github.com/sagernet/sing v0.9.6-0.20260922013354-87c33f17688f
 	github.com/stretchr/testify v1.12.1
 	github.com/ti-mo/netfilter v0.5.3
 	go.etcd.io/bbolt v1.5.0
@@ -154,3 +156,9 @@ tool (
 
 // See CVE-2026-98432.
 godebug multipathtcp=0
+
+// AnyTLS upstreams, see internal/anytlsupstream.
+replace (
+	github.com/AdguardTeam/dnsproxy => ../dnsproxy-fork
+	github.com/anytls/sing-anytls => github.com/KexiChanProjectProxy/sing-anytls v0.0.14-kexi.8
+)
