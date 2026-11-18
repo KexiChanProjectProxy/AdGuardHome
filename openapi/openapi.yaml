@@ -1549,6 +1549,42 @@
           'format': 'double'
           'example': 1700000000000
           'description': 'Start time of the web API server (Unix time in milliseconds).'
+        'cache_refresh':
+          '$ref': '#/components/schemas/CacheRefreshStatus'
+    'CacheRefreshStatus':
+      'type': 'object'
+      'description': >
+        Status of the proactive DNS cache refresh.  The counters are reset when
+        the DNS server is restarted or reconfigured.
+      'required':
+      - 'enabled'
+      - 'refreshed'
+      - 'failed'
+      - 'skipped'
+      - 'tracked'
+      'properties':
+        'enabled':
+          'type': 'boolean'
+          'description': 'Whether the proactive cache refresh is running.'
+        'refreshed':
+          'type': 'integer'
+          'format': 'int64'
+          'description': 'Number of refreshes that cached a new response.'
+        'failed':
+          'type': 'integer'
+          'format': 'int64'
+          'description': 'Number of failed refreshes.'
+        'skipped':
+          'type': 'integer'
+          'format': 'int64'
+          'description': >
+            Number of refreshes that fetched nothing, because the entry was
+            still fresh or was being refreshed elsewhere, or that dropped an
+            entry which became uncacheable.
+        'tracked':
+          'type': 'integer'
+          'format': 'int64'
+          'description': 'Number of currently tracked cache keys.'
     'DNSConfig':
       'type': 'object'
       'description': 'DNS server configuration'
@@ -1655,6 +1691,59 @@
             the configuration file must already be greater than 0.
         'cache_optimistic':
           'type': 'boolean'
+        'cache_refresh_enabled':
+          'type': 'boolean'
+          'description': >
+            Enables the proactive refresh of popular cache entries.  It only
+            has effect when both `cache_enabled` and `cache_optimistic` are
+            `true`.
+        'cache_refresh_max_concurrent':
+          'type': 'integer'
+          'format': 'uint32'
+          'minimum': 1
+          'example': 4
+          'description': 'Maximum number of simultaneous proactive refreshes.'
+        'cache_refresh_delay':
+          'type': 'integer'
+          'format': 'uint32'
+          'minimum': 0
+          'example': 1
+          'description': >
+            How long after its expiry a cache entry is refreshed, in seconds.
+            Until then, the expired entry is served optimistically.
+        'cache_refresh_min_hits':
+          'type': 'integer'
+          'format': 'uint32'
+          'minimum': 0
+          'example': 3
+          'description': >
+            Only the cache entries queried more than this number of times in
+            the last 24 hours are refreshed.
+        'cache_refresh_prefetch_top':
+          'type': 'integer'
+          'format': 'uint32'
+          'minimum': 0
+          'example': 100
+          'description': >
+            Number of the most queried cache entries that are refreshed before
+            their expiry instead of after it.
+        'cache_refresh_prefetch_before':
+          'type': 'integer'
+          'format': 'uint32'
+          'minimum': 0
+          'example': 10
+          'description': >
+            How long before its expiry one of the most queried cache entries
+            is refreshed, in seconds.  The window is limited to the half of the
+            entry's TTL.
+        'cache_refresh_max_tracked':
+          'type': 'integer'
+          'format': 'uint32'
+          'minimum': 1
+          'example': 10000
+          'description': >
+            Maximum number of tracked cache keys.  The least recently queried
+            keys are evicted beyond it.
         'upstream_mode':
           'type': 'string'
           'enum':

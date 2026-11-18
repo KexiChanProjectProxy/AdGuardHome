@@ -502,7 +502,16 @@ var config = &configuration{
 			CacheSize:                4 * 1024 * 1024,
 			CacheOptimisticAnswerTTL: timeutil.Duration(30 * time.Second),
 			CacheOptimisticMaxAge:    timeutil.Duration(12 * time.Hour),
-			EnableDNSSEC:             true,
+
+			CacheRefreshEnabled:        false,
+			CacheRefreshMaxConcurrent:  4,
+			CacheRefreshDelay:          timeutil.Duration(1 * time.Second),
+			CacheRefreshMinHits:        3,
+			CacheRefreshPrefetchTop:    100,
+			CacheRefreshPrefetchBefore: timeutil.Duration(10 * time.Second),
+			CacheRefreshMaxTracked:     10_000,
+
+			EnableDNSSEC: true,
 
 			EDNSClientSubnet: &dnsforward.EDNSClientSubnet{
 				CustomIP:  netip.Addr{},

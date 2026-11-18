@@ -8,7 +8,16 @@ import { validateBetween, validateRequiredValue } from 'panel/helpers/validators
 import { useField } from 'panel/hooks/useField';
 import theme from 'panel/lib/theme';
 
-type CacheConfigKey = 'cache_size' | 'cache_ttl_min' | 'cache_ttl_max';
+type CacheConfigKey =
+    | 'cache_size'
+    | 'cache_ttl_min'
+    | 'cache_ttl_max'
+    | 'cache_refresh_max_concurrent'
+    | 'cache_refresh_delay'
+    | 'cache_refresh_min_hits'
+    | 'cache_refresh_prefetch_top'
+    | 'cache_refresh_prefetch_before'
+    | 'cache_refresh_max_tracked';
 
 type Props = {
     configKey: CacheConfigKey;
@@ -24,6 +33,7 @@ const CACHE_DIALOG_CONFIG: Record<
         description: () => string;
         label: () => string;
         placeholder?: () => string;
+        min?: number;
         validate: (v: string) => string;
     }
 > = {
@@ -65,6 +75,58 @@ const CACHE_DIALOG_CONFIG: Record<
             return '';
         },
     },
+    cache_refresh_max_concurrent: {
+        title: () => intl.getMessage('dns_cache_refresh_max_concurrent'),
+        description: () => intl.getMessage('dns_cache_refresh_max_concurrent_desc'),
+        label: () => intl.getMessage('dns_cache_refresh_max_concurrent_label'),
+        min: 1,
+        validate: (v) =>
+            validateRequiredValue(v) || validateBetween(Number(v), 1, UINT32_RANGE.MAX) || '',
+    },
+    cache_refresh_delay: {
+        title: () => intl.getMessage('dns_cache_refresh_delay'),
+        description: () => intl.getMessage('dns_cache_refresh_delay_desc'),
+        label: () => intl.getMessage('dns_cache_refresh_delay_label'),
+        validate: (v) =>
+            validateRequiredValue(v) ||
+            validateBetween(Number(v), UINT32_RANGE.MIN, UINT32_RANGE.MAX) ||
+            '',
+    },
+    cache_refresh_min_hits: {
+        title: () => intl.getMessage('dns_cache_refresh_min_hits'),
+        description: () => intl.getMessage('dns_cache_refresh_min_hits_desc'),
+        label: () => intl.getMessage('dns_cache_refresh_min_hits_label'),
+        validate: (v) =>
+            validateRequiredValue(v) ||
+            validateBetween(Number(v), UINT32_RANGE.MIN, UINT32_RANGE.MAX) ||
+            '',
+    },
+    cache_refresh_prefetch_top: {
+        title: () => intl.getMessage('dns_cache_refresh_prefetch_top'),
+        description: () => intl.getMessage('dns_cache_refresh_prefetch_top_desc'),
+        label: () => intl.getMessage('dns_cache_refresh_prefetch_top_label'),
+        validate: (v) =>
+            validateRequiredValue(v) ||
+            validateBetween(Number(v), UINT32_RANGE.MIN, UINT32_RANGE.MAX) ||
+            '',
+    },
+    cache_refresh_prefetch_before: {
+        title: () => intl.getMessage('dns_cache_refresh_prefetch_before'),
+        description: () => intl.getMessage('dns_cache_refresh_prefetch_before_desc'),
+        label: () => intl.getMessage('dns_cache_refresh_prefetch_before_label'),
+        validate: (v) =>
+            validateRequiredValue(v) ||
+            validateBetween(Number(v), UINT32_RANGE.MIN, UINT32_RANGE.MAX) ||
+            '',
+    },
+    cache_refresh_max_tracked: {
+        title: () => intl.getMessage('dns_cache_refresh_max_tracked'),
+        description: () => intl.getMessage('dns_cache_refresh_max_tracked_desc'),
+        label: () => intl.getMessage('dns_cache_refresh_max_tracked_label'),
+        min: 1,
+        validate: (v) =>
+            validateRequiredValue(v) || validateBetween(Number(v), 1, UINT32_RANGE.MAX) || '',
+    },
 };
 
 export const CacheInputDialog = (props: Props) => {
@@ -100,7 +162,7 @@ export const CacheInputDialog = (props: Props) => {
                     id={props.configKey}
                     label={config().label()}
                     placeholder={config().placeholder?.()}
-                    min={UINT32_RANGE.MIN}
+                    min={config().min ?? UINT32_RANGE.MIN}
                     max={UINT32_RANGE.MAX}
                     errorMessage={field.error()}
                     size="large"

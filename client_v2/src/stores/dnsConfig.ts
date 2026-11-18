@@ -38,6 +38,13 @@ type DnsConfigState = {
     cache_ttl_min?: number;
     cache_optimistic?: boolean;
     cache_enabled?: boolean;
+    cache_refresh_enabled?: boolean;
+    cache_refresh_max_concurrent?: number;
+    cache_refresh_delay?: number;
+    cache_refresh_min_hits?: number;
+    cache_refresh_prefetch_top?: number;
+    cache_refresh_prefetch_before?: number;
+    cache_refresh_max_tracked?: number;
 };
 
 export const DEFAULT_BLOCKING_IPV4 = '0.0.0.0';
@@ -132,6 +139,11 @@ export const toggleCacheEnabled = () => {
 /** Toggles `cache_optimistic`. Used by Cache Section 3, Row 4. */
 export const toggleOptimisticCaching = () => {
     setDnsConfig({ cache_optimistic: !state.cache_optimistic }, { silent: true });
+};
+
+/** Toggles `cache_refresh_enabled`. Used by Cache Section 3, Row 5. */
+export const toggleCacheRefreshEnabled = () => {
+    setDnsConfig({ cache_refresh_enabled: !state.cache_refresh_enabled }, { silent: true });
 };
 
 /** Toggles `edns_cs_enabled`. Used by ServerConfig Section 2, Row 6 switch-link. */

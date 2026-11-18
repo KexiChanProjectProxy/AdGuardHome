@@ -495,6 +495,8 @@ func (s *Server) processUpstream(
 	dctx.responseFromUpstream = true
 	dctx.responseAD = pctx.Res.AuthenticatedData
 
+	s.observeForCacheRefresh(pctx)
+
 	return resultCodeSuccess
 }
 

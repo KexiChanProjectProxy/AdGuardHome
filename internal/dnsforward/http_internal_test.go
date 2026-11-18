@@ -253,6 +253,13 @@ func TestDNSForwardHTTP_handleSetConfig(t *testing.T) {
 		name:    "cache_bad_ttl",
 		wantSet: `validating dns config: cache_ttl_min must be less than or equal to cache_ttl_max`,
 	}, {
+		name:    "cache_refresh_good",
+		wantSet: "",
+	}, {
+		name: "cache_refresh_bad_max_concurrent",
+		wantSet: "validating dns config: cache_refresh_max_concurrent: not positive: 0\n" +
+			"cache_refresh_max_tracked: not positive: 0",
+	}, {
 		name:    "upstream_mode_bad",
 		wantSet: `validating dns config: upstream_mode: incorrect value "somethingelse"`,
 	}, {

@@ -129,6 +129,38 @@ type Config struct {
 	// when cache is optimistic.
 	CacheOptimisticMaxAge timeutil.Duration `yaml:"cache_optimistic_max_age"`
 
+	// CacheRefreshEnabled defines if popular cache entries should be refreshed
+	// proactively.  It only has effect when both CacheEnabled and
+	// CacheOptimistic are true.
+	CacheRefreshEnabled bool `yaml:"cache_refresh_enabled"`
+
+	// CacheRefreshMaxConcurrent is the maximum number of simultaneous
+	// proactive cache refreshes.  It must be positive when
+	// CacheRefreshEnabled is true.
+	CacheRefreshMaxConcurrent uint32 `yaml:"cache_refresh_max_concurrent"`
+
+	// CacheRefreshDelay is how long after its expiry a cache entry is
+	// refreshed.  Until then, the expired entry is served optimistically.
+	CacheRefreshDelay timeutil.Duration `yaml:"cache_refresh_delay"`
+
+	// CacheRefreshMinHits is the number of queries in the last 24 hours that
+	// a cache entry must exceed to be refreshed proactively.
+	CacheRefreshMinHits uint32 `yaml:"cache_refresh_min_hits"`
+
+	// CacheRefreshPrefetchTop is the number of the most queried cache entries
+	// that are refreshed before their expiry instead of after it.
+	CacheRefreshPrefetchTop uint32 `yaml:"cache_refresh_prefetch_top"`
+
+	// CacheRefreshPrefetchBefore is how long before its expiry one of the
+	// CacheRefreshPrefetchTop most queried entries is refreshed.  The window
+	// is limited to the half of the entry's TTL.
+	CacheRefreshPrefetchBefore timeutil.Duration `yaml:"cache_refresh_prefetch_before"`
+
+	// CacheRefreshMaxTracked is the maximum number of cache keys whose queries
+	// are counted.  The least recently queried keys are evicted beyond it.  It
+	// must be positive when CacheRefreshEnabled is true.
+	CacheRefreshMaxTracked uint32 `yaml:"cache_refresh_max_tracked"`
+
 	// Other settings
 
 	// BogusNXDomain is the list of IP addresses, responses with them will be
@@ -402,6 +434,12 @@ func (s *Server) newProxyConfig(ctx context.Context) (conf *proxy.Config, err er
 		return nil, err
 	}
 
+	err = validateCacheRefresh(&srvConf.Config)
+	if err != nil {
+		// Don't wrap the error since it's informative enough as is.
+		return nil, err
+	}
+
 	return conf, nil
 }
 
@@ -454,6 +492,26 @@ func prepareCacheConfig(
 	}
 
 	return conf, nil
+}
+
+// validateCacheRefresh returns an error if the proactive cache refresh
+// settings of conf are invalid.  conf must not be nil.
+func validateCacheRefresh(conf *Config) (err error) {
+	if !conf.CacheRefreshEnabled {
+		return nil
+	}
+
+	err = errors.Join(
+		validate.Positive("cache_refresh_max_concurrent", conf.CacheRefreshMaxConcurrent),
+		validate.Positive("cache_refresh_max_tracked", conf.CacheRefreshMaxTracked),
+		validate.NotNegative("cache_refresh_delay", conf.CacheRefreshDelay),
+		validate.NotNegative("cache_refresh_prefetch_before", conf.CacheRefreshPrefetchBefore),
+	)
+	if err != nil {
+		return fmt.Errorf("cache_refresh_enabled is true: %w", err)
+	}
+
+	return nil
 }
 
 // parseBogusNXDOMAIN parses the bogus NXDOMAIN strings into valid subnets.
