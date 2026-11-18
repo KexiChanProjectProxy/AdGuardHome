@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -79,15 +80,12 @@ const servFailMaxTTL = 30 * time.Second
 // client.  It mirrors the way dnsproxy calculates the TTL of cached items and
 // returns zero if dnsproxy wouldn't cache resp.  resp is expected to be the
 // response to a request with a single question.
+//
+// The client response may differ from the cached one: DNSSEC records may be
+// removed and the message may be truncated for the client.  So the truncation
+// is ignored, and the result is only a hint that is corrected by refreshes.
 func ResponseTTL(resp *dns.Msg) (ttl time.Duration) {
-	if resp == nil || resp.Truncated || len(resp.Question) != 1 {
-		return 0
-	}
-
-	switch resp.Rcode {
-	case dns.RcodeSuccess, dns.RcodeNameError, dns.RcodeServerFailure:
-		// Go on.
-	default:
+	if resp == nil || len(resp.Question) != 1 || !isCacheable(resp) {
 		return 0
 	}
 
@@ -102,6 +100,50 @@ func ResponseTTL(resp *dns.Msg) (ttl time.Duration) {
 	}
 
 	return ttl
+}
+
+// isCacheable returns true if dnsproxy caches resp, judging by its response
+// code and contents.  resp must have exactly one question.
+func isCacheable(resp *dns.Msg) (ok bool) {
+	switch resp.Rcode {
+	case dns.RcodeSuccess:
+		qt := resp.Question[0].Qtype
+
+		return (qt != dns.TypeA && qt != dns.TypeAAAA) || hasIPAnswer(resp) || isNegative(resp)
+	case dns.RcodeNameError:
+		return isNegative(resp)
+	case dns.RcodeServerFailure:
+		return true
+	default:
+		return false
+	}
+}
+
+// hasIPAnswer returns true if the answer section of m contains an A or AAAA
+// record.
+func hasIPAnswer(m *dns.Msg) (ok bool) {
+	return slices.ContainsFunc(m.Answer, func(rr dns.RR) (isIP bool) {
+		t := rr.Header().Rrtype
+
+		return t == dns.TypeA || t == dns.TypeAAAA
+	})
+}
+
+// isNegative returns true if the authority section of m contains a SOA record
+// and no NS records, so that it's a cacheable negative response.
+func isNegative(m *dns.Msg) (ok bool) {
+	for _, rr := range m.Ns {
+		switch rr.Header().Rrtype {
+		case dns.TypeSOA:
+			ok = true
+		case dns.TypeNS:
+			return false
+		default:
+			// Go on.
+		}
+	}
+
+	return ok
 }
 
 // minRRTTL returns the lowest TTL among the resource records of m except OPT.
@@ -177,9 +219,20 @@ const (
 	// that was being refreshed elsewhere.
 	inProgressRetry = 5 * time.Second
 
-	// hitWindowHours is the number of hours over which the queries for a key
-	// are counted.
-	hitWindowHours = 24
+	// hitBuckets is the number of hourly buckets in which the queries for a
+	// key are counted.  It's one more than the number of hours in the window,
+	// since the bucket of the current hour is only partially filled.
+	hitBuckets = 24 + 1
+)
+
+// Limits of the configuration.
+const (
+	// MaxMaxConcurrent is the maximum allowed value of
+	// [Config.MaxConcurrent].
+	MaxMaxConcurrent = 1024
+
+	// MaxMaxTracked is the maximum allowed value of [Config.MaxTracked].
+	MaxMaxTracked = 100_000
 )
 
 // Config is the configuration of a [Service].
@@ -245,14 +298,20 @@ type Service struct {
 	// done is closed on shutdown.
 	done chan struct{}
 
+	// loopDone is closed when the scheduling loop exits.
+	loopDone chan struct{}
+
 	// cancel cancels the context of running refreshes.
 	cancel context.CancelFunc
 
-	// wg tracks the running goroutines.
+	// wg tracks the running refreshes.
 	wg sync.WaitGroup
 
 	// stopOnce makes sure that shutdown happens once.
 	stopOnce sync.Once
+
+	// started is true after [Service.Start].
+	started atomic.Bool
 
 	refreshed atomic.Uint64
 	failed    atomic.Uint64
@@ -287,6 +346,7 @@ func New(c *Config) (s *Service) {
 		tracker:          newTracker(c.MaxTracked),
 		sema:             make(chan struct{}, c.MaxConcurrent),
 		done:             make(chan struct{}),
+		loopDone:         make(chan struct{}),
 		cancel:           func() {},
 		delay:            c.Delay,
 		prefetchBefore:   c.PrefetchBefore,
@@ -304,32 +364,31 @@ func (s *Service) Start(_ context.Context) (err error) {
 	// the start-up procedure.
 	ctx, cancel := context.WithCancel(context.Background())
 	s.cancel = cancel
+	s.started.Store(true)
 
-	s.wg.Add(1)
 	go s.run(ctx)
 
 	return nil
 }
 
-// Shutdown stops the background refreshing and waits for the running
-// refreshes to finish until ctx is done.
+// Shutdown stops the background refreshing.  It doesn't wait for the running
+// refreshes, since upstream exchanges can't be cancelled and a refresh may take
+// several upstream timeouts.  Their results are discarded.
 func (s *Service) Shutdown(ctx context.Context) (err error) {
+	if !s.started.Load() {
+		return nil
+	}
+
 	s.stopOnce.Do(func() {
 		close(s.done)
 		s.cancel()
 	})
 
-	waitCh := make(chan struct{})
-	go func() {
-		s.wg.Wait()
-		close(waitCh)
-	}()
-
 	select {
-	case <-waitCh:
+	case <-s.loopDone:
 		return nil
 	case <-ctx.Done():
-		return fmt.Errorf("waiting for refreshes: %w", context.Cause(ctx))
+		return fmt.Errorf("waiting for scheduling loop: %w", context.Cause(ctx))
 	}
 }
 
@@ -361,7 +420,7 @@ func (s *Service) Counters() (c Counters) {
 // run checks for due entries every tick interval until the service is shut
 // down.  It's intended to be used as a goroutine.
 func (s *Service) run(ctx context.Context) {
-	defer s.wg.Done()
+	defer close(s.loopDone)
 	defer slogutil.RecoverAndLog(ctx, s.logger)
 
 	t := time.NewTicker(s.tickInterval)

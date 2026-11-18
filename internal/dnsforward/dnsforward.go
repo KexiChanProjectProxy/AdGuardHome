@@ -487,7 +487,15 @@ func (s *Server) startLocked(ctx context.Context) error {
 
 	s.isRunning = true
 
-	if cr := s.cacheRefresh.Load(); cr != nil {
+	cr := s.cacheRefresh.Load()
+	if cr == nil {
+		// The previous service has been shut down by a stop, so create a new
+		// one for the restarted proxy.
+		cr = s.newCacheRefresh(ctx, s.dnsProxy)
+		s.cacheRefresh.Store(cr)
+	}
+
+	if cr != nil {
 		err = cr.Start(ctx)
 		if err != nil {
 			return fmt.Errorf("starting cache refresh: %w", err)

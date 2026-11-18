@@ -1512,6 +1512,7 @@
       - 'running'
       - 'version'
       - 'language'
+      - 'cache_refresh'
       'properties':
         'dns_addresses':
           'example': ['127.0.0.1']
@@ -1555,7 +1556,9 @@
       'type': 'object'
       'description': >
         Status of the proactive DNS cache refresh.  The counters are reset when
-        the DNS server is restarted or reconfigured.
+        the DNS server is restarted or reconfigured.  Only the general cache is
+        refreshed, so responses cached per client subnet or for clients with
+        custom upstreams aren't tracked.
       'required':
       - 'enabled'
       - 'refreshed'
@@ -1569,14 +1572,19 @@
         'refreshed':
           'type': 'integer'
           'format': 'int64'
+          'minimum': 0
           'description': 'Number of refreshes that cached a new response.'
         'failed':
           'type': 'integer'
           'format': 'int64'
-          'description': 'Number of failed refreshes.'
+          'minimum': 0
+          'description': >
+            Number of failed refreshes, including upstream SERVFAIL answers,
+            which don't replace the cached response.
         'skipped':
           'type': 'integer'
           'format': 'int64'
+          'minimum': 0
           'description': >
             Number of refreshes that fetched nothing, because the entry was
             still fresh or was being refreshed elsewhere, or that dropped an
@@ -1584,6 +1592,7 @@
         'tracked':
           'type': 'integer'
           'format': 'int64'
+          'minimum': 0
           'description': 'Number of currently tracked cache keys.'
     'DNSConfig':
       'type': 'object'
@@ -1701,6 +1710,7 @@
           'type': 'integer'
           'format': 'uint32'
           'minimum': 1
+          'maximum': 1024
           'example': 4
           'description': 'Maximum number of simultaneous proactive refreshes.'
         'cache_refresh_delay':
@@ -1710,7 +1720,9 @@
           'example': 1
           'description': >
             How long after its expiry a cache entry is refreshed, in seconds.
-            Until then, the expired entry is served optimistically.
+            Until then, the expired entry is served optimistically.  It must be
+            less than the `dns.cache_optimistic_max_age` setting of the
+            configuration file.
         'cache_refresh_min_hits':
           'type': 'integer'
           'format': 'uint32'
@@ -1740,6 +1752,7 @@
           'type': 'integer'
           'format': 'uint32'
           'minimum': 1
+          'maximum': 100000
           'example': 10000
           'description': >
             Maximum number of tracked cache keys.  The least recently queried

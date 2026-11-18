@@ -18,6 +18,7 @@ import (
 	"github.com/AdguardTeam/AdGuardHome/internal/aghnet"
 	"github.com/AdguardTeam/AdGuardHome/internal/aghslog"
 	"github.com/AdguardTeam/AdGuardHome/internal/client"
+	"github.com/AdguardTeam/AdGuardHome/internal/dnsforward/cacherefresh"
 	"github.com/AdguardTeam/dnscrypt"
 	"github.com/AdguardTeam/dnsproxy/proxy"
 	"github.com/AdguardTeam/dnsproxy/ratelimit"
@@ -501,14 +502,37 @@ func validateCacheRefresh(conf *Config) (err error) {
 		return nil
 	}
 
+	maxAge := conf.CacheOptimisticMaxAge
+	if maxAge <= 0 {
+		maxAge = timeutil.Duration(proxy.DefaultOptimisticMaxAge)
+	}
+
 	err = errors.Join(
-		validate.Positive("cache_refresh_max_concurrent", conf.CacheRefreshMaxConcurrent),
-		validate.Positive("cache_refresh_max_tracked", conf.CacheRefreshMaxTracked),
+		validate.InRange(
+			"cache_refresh_max_concurrent",
+			conf.CacheRefreshMaxConcurrent,
+			1,
+			cacherefresh.MaxMaxConcurrent,
+		),
+		validate.InRange(
+			"cache_refresh_max_tracked",
+			conf.CacheRefreshMaxTracked,
+			1,
+			cacherefresh.MaxMaxTracked,
+		),
 		validate.NotNegative("cache_refresh_delay", conf.CacheRefreshDelay),
 		validate.NotNegative("cache_refresh_prefetch_before", conf.CacheRefreshPrefetchBefore),
 	)
+	if err == nil && conf.CacheRefreshDelay >= maxAge {
+		err = fmt.Errorf(
+			"cache_refresh_delay %s must be less than cache_optimistic_max_age %s",
+			conf.CacheRefreshDelay,
+			maxAge,
+		)
+	}
+
 	if err != nil {
-		return fmt.Errorf("cache_refresh_enabled is true: %w", err)
+		return fmt.Errorf("invalid cache refresh settings: %w", err)
 	}
 
 	return nil

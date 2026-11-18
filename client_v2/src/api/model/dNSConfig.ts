@@ -60,10 +60,11 @@ export interface DNSConfig {
     /**
      * Maximum number of simultaneous proactive refreshes.
      * @minimum 1
+     * @maximum 1024
      */
     cache_refresh_max_concurrent?: number;
     /**
-     * How long after its expiry a cache entry is refreshed, in seconds. Until then, the expired entry is served optimistically.
+     * How long after its expiry a cache entry is refreshed, in seconds. Until then, the expired entry is served optimistically.  It must be less than the `dns.cache_optimistic_max_age` setting of the configuration file.
      * @minimum 0
      */
     cache_refresh_delay?: number;
@@ -85,6 +86,7 @@ export interface DNSConfig {
     /**
      * Maximum number of tracked cache keys.  The least recently queried keys are evicted beyond it.
      * @minimum 1
+     * @maximum 100000
      */
     cache_refresh_max_tracked?: number;
     /** Upstream modes enumeration. The empty string value is deprecated; use `load_balance` instead. */

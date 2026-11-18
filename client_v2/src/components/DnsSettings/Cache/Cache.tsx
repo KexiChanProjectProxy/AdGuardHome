@@ -40,8 +40,8 @@ export const Cache = () => {
 
     // Proactive refresh only works on top of the optimistic cache.
     const refreshAvailable = () => !!dnsConfigState.cache_enabled && !!dnsConfigState.cache_optimistic;
-    const refreshSettingsDisabled = () => !refreshAvailable() || !dnsConfigState.cache_refresh_enabled;
-    const countSummary = (value?: number) => (value === undefined ? '' : String(value));
+    const refreshOn = () => refreshAvailable() && !!dnsConfigState.cache_refresh_enabled;
+    const countSummary = (value?: number) => (value === undefined ? '' : value.toLocaleString());
 
     return (
         <div class={s.section}>
@@ -102,19 +102,18 @@ export const Cache = () => {
                 id="cache_refresh_enabled"
                 title={intl.getMessage('dns_cache_refresh')}
                 description={intl.getMessage('dns_cache_refresh_desc')}
-                checked={!!dnsConfigState.cache_refresh_enabled}
+                checked={refreshOn()}
                 disabled={!refreshAvailable()}
                 onChange={() => toggleCacheRefreshEnabled()}
             />
 
-            <Show when={refreshAvailable() && dnsConfigState.cache_refresh_enabled}>
+            <Show when={refreshOn()}>
                 <SettingRow
                     variant="link"
                     id="cache_refresh_max_concurrent"
                     title={intl.getMessage('dns_cache_refresh_max_concurrent')}
                     description={intl.getMessage('dns_cache_refresh_max_concurrent_desc')}
                     value={countSummary(dnsConfigState.cache_refresh_max_concurrent)}
-                    disabled={refreshSettingsDisabled()}
                     onClick={refreshMaxConcurrentDialog.openDialog}
                 />
 
@@ -124,7 +123,6 @@ export const Cache = () => {
                     title={intl.getMessage('dns_cache_refresh_delay')}
                     description={intl.getMessage('dns_cache_refresh_delay_desc')}
                     value={getTtlSummary(dnsConfigState.cache_refresh_delay)}
-                    disabled={refreshSettingsDisabled()}
                     onClick={refreshDelayDialog.openDialog}
                 />
 
@@ -134,7 +132,6 @@ export const Cache = () => {
                     title={intl.getMessage('dns_cache_refresh_min_hits')}
                     description={intl.getMessage('dns_cache_refresh_min_hits_desc')}
                     value={countSummary(dnsConfigState.cache_refresh_min_hits)}
-                    disabled={refreshSettingsDisabled()}
                     onClick={refreshMinHitsDialog.openDialog}
                 />
 
@@ -144,7 +141,6 @@ export const Cache = () => {
                     title={intl.getMessage('dns_cache_refresh_prefetch_top')}
                     description={intl.getMessage('dns_cache_refresh_prefetch_top_desc')}
                     value={countSummary(dnsConfigState.cache_refresh_prefetch_top)}
-                    disabled={refreshSettingsDisabled()}
                     onClick={refreshPrefetchTopDialog.openDialog}
                 />
 
@@ -154,7 +150,7 @@ export const Cache = () => {
                     title={intl.getMessage('dns_cache_refresh_prefetch_before')}
                     description={intl.getMessage('dns_cache_refresh_prefetch_before_desc')}
                     value={getTtlSummary(dnsConfigState.cache_refresh_prefetch_before)}
-                    disabled={refreshSettingsDisabled()}
+                    disabled={!dnsConfigState.cache_refresh_prefetch_top}
                     onClick={refreshPrefetchBeforeDialog.openDialog}
                 />
 
@@ -164,7 +160,6 @@ export const Cache = () => {
                     title={intl.getMessage('dns_cache_refresh_max_tracked')}
                     description={intl.getMessage('dns_cache_refresh_max_tracked_desc')}
                     value={countSummary(dnsConfigState.cache_refresh_max_tracked)}
-                    disabled={refreshSettingsDisabled()}
                     onClick={refreshMaxTrackedDialog.openDialog}
                 />
             </Show>

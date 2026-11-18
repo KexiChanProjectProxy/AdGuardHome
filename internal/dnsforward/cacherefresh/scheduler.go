@@ -3,6 +3,7 @@ package cacherefresh
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"hash/fnv"
 	"slices"
 	"time"
@@ -17,8 +18,16 @@ type candidate struct {
 	hits  uint64
 }
 
+// dueEntry is an entry that is due to be refreshed.
+type dueEntry struct {
+	due          time.Time
+	entry        *entry
+	minRemaining time.Duration
+}
+
 // tick starts the refreshes of the entries that are due at now, at most as
-// many as there are free refresh slots, the most queried first.
+// many as there are free refresh slots, the longest overdue first, so that
+// frequently due entries with short TTLs don't starve the others.
 func (s *Service) tick(ctx context.Context, now time.Time) {
 	free := cap(s.sema) - len(s.sema)
 	if free <= 0 {
@@ -28,17 +37,22 @@ func (s *Service) tick(ctx context.Context, now time.Time) {
 	s.tracker.mu.Lock()
 	defer s.tracker.mu.Unlock()
 
-	candidates := s.candidatesLocked(now)
-	for i, c := range candidates {
-		if free == 0 {
-			break
+	var dues []dueEntry
+	for i, c := range s.candidatesLocked(now) {
+		de, ok := s.dueEntry(c.entry, i, now)
+		if ok {
+			dues = append(dues, de)
 		}
+	}
 
-		e := c.entry
-		minRemaining, ok := s.dueParams(e, i, now)
-		if !ok {
-			continue
-		}
+	// The candidates are sorted by the number of queries, so a stable sort
+	// keeps the most queried first among the equally overdue ones.
+	slices.SortStableFunc(dues, func(a, b dueEntry) (res int) {
+		return a.due.Compare(b.due)
+	})
+
+	for _, de := range dues[:min(free, len(dues))] {
+		e := de.entry
 
 		select {
 		case s.sema <- struct{}{}:
@@ -48,30 +62,33 @@ func (s *Service) tick(ctx context.Context, now time.Time) {
 			return
 		}
 
-		free--
 		e.inFlight = true
 
 		s.wg.Add(1)
-		go s.refresh(ctx, e, minRemaining)
+		go s.refresh(ctx, e, de.minRemaining)
 	}
 }
 
-// dueParams returns the minimum remaining validity to request from the
-// [Refresher] and true if e, which is at position i among the candidates, is
-// due to be refreshed at now.  s.tracker.mu must be locked.
-func (s *Service) dueParams(e *entry, i int, now time.Time) (minRemaining time.Duration, ok bool) {
+// dueEntry returns the refresh parameters of e, which is at position i among
+// the candidates, and true if it's due to be refreshed at now.
+// s.tracker.mu must be locked.
+func (s *Service) dueEntry(e *entry, i int, now time.Time) (de dueEntry, ok bool) {
 	if e.inFlight || e.failures >= maxFailures || now.Before(e.nextTry) {
-		return 0, false
+		return dueEntry{}, false
 	}
 
-	due := e.expiry.Add(s.delay)
+	de = dueEntry{
+		due:   e.expiry.Add(s.delay),
+		entry: e,
+	}
+
 	if uint64(i) < uint64(s.prefetchTop) {
 		// Never prefetch earlier than halfway through the validity.
-		minRemaining = min(s.prefetchBefore, e.ttl/2)
-		due = e.expiry.Add(-minRemaining)
+		de.minRemaining = min(s.prefetchBefore, e.ttl/2)
+		de.due = e.expiry.Add(-de.minRemaining)
 	}
 
-	return minRemaining, !now.Before(due)
+	return de, !now.Before(de.due)
 }
 
 // candidatesLocked returns the tracked entries that have more queries than
@@ -120,7 +137,7 @@ func (s *Service) refresh(ctx context.Context, e *entry, minRemaining time.Durat
 	ctx, cancel := context.WithTimeout(ctx, s.refreshTimeout)
 	defer cancel()
 
-	ttl, refreshed, err := s.refresher.Refresh(ctx, e.key, minRemaining)
+	ttl, refreshed, err := s.callRefresher(ctx, e.key, minRemaining)
 	now := s.clock.Now()
 
 	s.tracker.mu.Lock()
@@ -164,7 +181,24 @@ func (s *Service) refresh(ctx context.Context, e *entry, minRemaining time.Durat
 		// is about to expire.
 		s.skipped.Add(1)
 		e.expiry = now.Add(max(ttl, time.Second))
+		e.ttl = max(e.ttl, ttl)
 	}
+}
+
+// callRefresher calls the refresher and turns its panic into an error, so that
+// the state of the entry is always updated.
+func (s *Service) callRefresher(
+	ctx context.Context,
+	k Key,
+	minRemaining time.Duration,
+) (ttl time.Duration, refreshed bool, err error) {
+	defer func() {
+		if v := recover(); v != nil {
+			ttl, refreshed, err = 0, false, fmt.Errorf("refresher panic: %v", v)
+		}
+	}()
+
+	return s.refresher.Refresh(ctx, k, minRemaining)
 }
 
 // backoff returns the delay before the next attempt after the given number of

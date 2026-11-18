@@ -8,6 +8,29 @@ import { validateBetween, validateRequiredValue } from 'panel/helpers/validators
 import { useField } from 'panel/hooks/useField';
 import theme from 'panel/lib/theme';
 
+// Limits of the proactive cache refresh settings, see the backend
+// cacherefresh.MaxMaxConcurrent and cacherefresh.MaxMaxTracked.
+const CACHE_REFRESH_MAX_CONCURRENT = 1024;
+const CACHE_REFRESH_MAX_TRACKED = 100000;
+
+/**
+ * Validates that v is a whole number between min and max, since the API only
+ * accepts whole numbers.
+ */
+const validateWholeNumber = (v: string, min: number, max: number): string => {
+    const requiredErr = validateRequiredValue(v);
+    if (requiredErr) {
+        return requiredErr;
+    }
+
+    const num = Number(v);
+    if (!Number.isInteger(num)) {
+        return intl.getMessage('form_error_format');
+    }
+
+    return validateBetween(num, min, max) || '';
+};
+
 type CacheConfigKey =
     | 'cache_size'
     | 'cache_ttl_min'
@@ -34,6 +57,7 @@ const CACHE_DIALOG_CONFIG: Record<
         label: () => string;
         placeholder?: () => string;
         min?: number;
+        max?: number;
         validate: (v: string) => string;
     }
 > = {
@@ -80,52 +104,40 @@ const CACHE_DIALOG_CONFIG: Record<
         description: () => intl.getMessage('dns_cache_refresh_max_concurrent_desc'),
         label: () => intl.getMessage('dns_cache_refresh_max_concurrent_label'),
         min: 1,
-        validate: (v) =>
-            validateRequiredValue(v) || validateBetween(Number(v), 1, UINT32_RANGE.MAX) || '',
+        max: CACHE_REFRESH_MAX_CONCURRENT,
+        validate: (v) => validateWholeNumber(v, 1, CACHE_REFRESH_MAX_CONCURRENT),
     },
     cache_refresh_delay: {
         title: () => intl.getMessage('dns_cache_refresh_delay'),
         description: () => intl.getMessage('dns_cache_refresh_delay_desc'),
         label: () => intl.getMessage('dns_cache_refresh_delay_label'),
-        validate: (v) =>
-            validateRequiredValue(v) ||
-            validateBetween(Number(v), UINT32_RANGE.MIN, UINT32_RANGE.MAX) ||
-            '',
+        validate: (v) => validateWholeNumber(v, UINT32_RANGE.MIN, UINT32_RANGE.MAX),
     },
     cache_refresh_min_hits: {
         title: () => intl.getMessage('dns_cache_refresh_min_hits'),
         description: () => intl.getMessage('dns_cache_refresh_min_hits_desc'),
         label: () => intl.getMessage('dns_cache_refresh_min_hits_label'),
-        validate: (v) =>
-            validateRequiredValue(v) ||
-            validateBetween(Number(v), UINT32_RANGE.MIN, UINT32_RANGE.MAX) ||
-            '',
+        validate: (v) => validateWholeNumber(v, UINT32_RANGE.MIN, UINT32_RANGE.MAX),
     },
     cache_refresh_prefetch_top: {
         title: () => intl.getMessage('dns_cache_refresh_prefetch_top'),
         description: () => intl.getMessage('dns_cache_refresh_prefetch_top_desc'),
         label: () => intl.getMessage('dns_cache_refresh_prefetch_top_label'),
-        validate: (v) =>
-            validateRequiredValue(v) ||
-            validateBetween(Number(v), UINT32_RANGE.MIN, UINT32_RANGE.MAX) ||
-            '',
+        validate: (v) => validateWholeNumber(v, UINT32_RANGE.MIN, UINT32_RANGE.MAX),
     },
     cache_refresh_prefetch_before: {
         title: () => intl.getMessage('dns_cache_refresh_prefetch_before'),
         description: () => intl.getMessage('dns_cache_refresh_prefetch_before_desc'),
         label: () => intl.getMessage('dns_cache_refresh_prefetch_before_label'),
-        validate: (v) =>
-            validateRequiredValue(v) ||
-            validateBetween(Number(v), UINT32_RANGE.MIN, UINT32_RANGE.MAX) ||
-            '',
+        validate: (v) => validateWholeNumber(v, UINT32_RANGE.MIN, UINT32_RANGE.MAX),
     },
     cache_refresh_max_tracked: {
         title: () => intl.getMessage('dns_cache_refresh_max_tracked'),
         description: () => intl.getMessage('dns_cache_refresh_max_tracked_desc'),
         label: () => intl.getMessage('dns_cache_refresh_max_tracked_label'),
         min: 1,
-        validate: (v) =>
-            validateRequiredValue(v) || validateBetween(Number(v), 1, UINT32_RANGE.MAX) || '',
+        max: CACHE_REFRESH_MAX_TRACKED,
+        validate: (v) => validateWholeNumber(v, 1, CACHE_REFRESH_MAX_TRACKED),
     },
 };
 
@@ -163,7 +175,7 @@ export const CacheInputDialog = (props: Props) => {
                     label={config().label()}
                     placeholder={config().placeholder?.()}
                     min={config().min ?? UINT32_RANGE.MIN}
-                    max={UINT32_RANGE.MAX}
+                    max={config().max ?? UINT32_RANGE.MAX}
                     errorMessage={field.error()}
                     size="large"
                 />

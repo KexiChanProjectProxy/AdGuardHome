@@ -115,8 +115,8 @@ func TestServer_newCacheRefresh(t *testing.T) {
 	}, {
 		modify: func(c *ServerConfig) { c.CacheRefreshMaxConcurrent = 0 },
 		name:   "bad_max_concurrent",
-		wantErr: "preparing proxy: cache_refresh_enabled is true: " +
-			"cache_refresh_max_concurrent: not positive: 0",
+		wantErr: "preparing proxy: invalid cache refresh settings: " +
+			"cache_refresh_max_concurrent: out of range: must be no less than 1, got 0",
 		wantOn: false,
 	}}
 

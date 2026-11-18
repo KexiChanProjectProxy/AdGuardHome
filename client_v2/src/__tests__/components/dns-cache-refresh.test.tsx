@@ -119,7 +119,7 @@ describe('Cache proactive refresh settings', () => {
         for (const title of REFRESH_ROW_TITLES) {
             expect(hasRow(title)).toBe(true);
         }
-        expect(screen.getByText('10000')).toBeDefined();
+        expect(screen.getByText('10,000')).toBeDefined();
 
         fireEvent.click(refreshSwitchRow());
         expect(mocks.dnsConfig).toHaveBeenCalledWith({ cache_refresh_enabled: false });

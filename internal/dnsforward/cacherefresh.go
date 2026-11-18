@@ -9,6 +9,7 @@ import (
 	"github.com/AdguardTeam/dnsproxy/proxy"
 	"github.com/AdguardTeam/golibs/errors"
 	"github.com/AdguardTeam/golibs/logutil/slogutil"
+	"github.com/miekg/dns"
 )
 
 // proxyRefresher is a [cacherefresh.Refresher] that refreshes the cache of a
@@ -58,6 +59,14 @@ func (s *Server) newCacheRefresh(ctx context.Context, prx *proxy.Proxy) (cr *cac
 		)
 
 		return nil
+	}
+
+	if c.EDNSClientSubnet != nil && c.EDNSClientSubnet.Enabled && c.EDNSClientSubnet.UseCustom {
+		s.logger.WarnContext(
+			ctx,
+			"edns_client_subnet.use_custom is true, so responses are cached per subnet; "+
+				"proactive cache refresh only covers the general cache and will have no effect",
+		)
 	}
 
 	timeout := c.UpstreamTimeout
@@ -113,7 +122,10 @@ func (s *Server) observeForCacheRefresh(pctx *proxy.DNSContext) {
 	}
 
 	k, ok := cacherefresh.KeyFromMsg(pctx.Req)
-	if !ok {
+	if !ok || (pctx.IsPrivateClient && k.Qtype == dns.TypePTR) {
+		// The upstreams for PTR requests of private clients may depend on the
+		// client, for example with DNS64, and refreshes are made as a public
+		// client.
 		return
 	}
 

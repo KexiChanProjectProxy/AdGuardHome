@@ -332,7 +332,7 @@ func (req *jsonDNSConfig) validate(
 	ownAddrs addrPortSet,
 	sysResolvers SystemResolvers,
 	privateNets netutil.SubnetSet,
-	curCacheSize uint32,
+	cur *Config,
 ) (err error) {
 	defer func() { err = errors.Annotate(err, "validating dns config: %w") }()
 
@@ -360,7 +360,7 @@ func (req *jsonDNSConfig) validate(
 		return err
 	}
 
-	err = req.validateCacheSettings(curCacheSize)
+	err = req.validateCacheSettings(cur)
 	if err != nil {
 		// Don't wrap the error since it's informative enough as is.
 		return err
@@ -490,14 +490,15 @@ func (req *jsonDNSConfig) validateUpstreamDNSServers(
 }
 
 // validateCacheSettings returns an error if the cache configuration is invalid.
-func (req *jsonDNSConfig) validateCacheSettings(curCacheSize uint32) (err error) {
-	err = req.validateCacheSize(curCacheSize)
+// cur is the current configuration, it must not be nil.
+func (req *jsonDNSConfig) validateCacheSettings(cur *Config) (err error) {
+	err = req.validateCacheSize(cur.CacheSize)
 	if err != nil {
 		// Don't wrap the error because it's informative enough as is.
 		return err
 	}
 
-	err = req.validateCacheRefresh()
+	err = req.validateCacheRefresh(cur)
 	if err != nil {
 		// Don't wrap the error because it's informative enough as is.
 		return err
@@ -520,24 +521,33 @@ func (req *jsonDNSConfig) validateCacheSettings(curCacheSize uint32) (err error)
 }
 
 // validateCacheRefresh returns an error if the proactive cache refresh
-// settings are invalid.
-func (req *jsonDNSConfig) validateCacheRefresh() (err error) {
-	var errs []error
-	if req.CacheRefreshMaxConcurrent != nil {
-		errs = append(errs, validate.Positive(
-			"cache_refresh_max_concurrent",
-			*req.CacheRefreshMaxConcurrent,
-		))
+// settings resulting from applying req to cur are invalid.  Fields that req
+// doesn't change are validated too, so that the server isn't reconfigured into
+// an invalid state.  cur must not be nil.
+func (req *jsonDNSConfig) validateCacheRefresh(cur *Config) (err error) {
+	conf := &Config{
+		CacheRefreshEnabled:        cur.CacheRefreshEnabled,
+		CacheRefreshMaxConcurrent:  cur.CacheRefreshMaxConcurrent,
+		CacheRefreshDelay:          cur.CacheRefreshDelay,
+		CacheRefreshPrefetchBefore: cur.CacheRefreshPrefetchBefore,
+		CacheRefreshMaxTracked:     cur.CacheRefreshMaxTracked,
+		CacheOptimisticMaxAge:      cur.CacheOptimisticMaxAge,
 	}
 
-	if req.CacheRefreshMaxTracked != nil {
-		errs = append(errs, validate.Positive(
-			"cache_refresh_max_tracked",
-			*req.CacheRefreshMaxTracked,
-		))
-	}
+	setIfNotNil(&conf.CacheRefreshEnabled, req.CacheRefreshEnabled)
+	setIfNotNil(&conf.CacheRefreshMaxConcurrent, req.CacheRefreshMaxConcurrent)
+	setDurationIfNotNil(&conf.CacheRefreshDelay, req.CacheRefreshDelay)
+	setDurationIfNotNil(&conf.CacheRefreshPrefetchBefore, req.CacheRefreshPrefetchBefore)
+	setIfNotNil(&conf.CacheRefreshMaxTracked, req.CacheRefreshMaxTracked)
 
-	return errors.Join(errs...)
+	// Validate the values sent even when the refresh stays disabled, so that
+	// it can't be enabled later with them.
+	conf.CacheRefreshEnabled = conf.CacheRefreshEnabled ||
+		req.CacheRefreshMaxConcurrent != nil ||
+		req.CacheRefreshMaxTracked != nil ||
+		req.CacheRefreshDelay != nil
+
+	return validateCacheRefresh(conf)
 }
 
 // validateCacheSize returns an error if the cache size configuration is
@@ -636,7 +646,7 @@ func (s *Server) handleSetConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = req.validate(ctx, s.logger, ourAddrs, s.sysResolvers, s.privateNets, s.conf.CacheSize)
+	err = req.validate(ctx, s.logger, ourAddrs, s.sysResolvers, s.privateNets, &s.conf.Config)
 	if err != nil {
 		aghhttp.ErrorAndLog(ctx, l, r, w, http.StatusBadRequest, "%s", err)
 

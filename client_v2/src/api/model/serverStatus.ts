@@ -24,5 +24,5 @@ export interface ServerStatus {
     language: Lang;
     /** Start time of the web API server (Unix time in milliseconds). */
     start_time?: number;
-    cache_refresh?: CacheRefreshStatus;
+    cache_refresh: CacheRefreshStatus;
 }

@@ -33,7 +33,7 @@ type entry struct {
 	cur int
 
 	// buckets contain the numbers of queries for each of the last hours.
-	buckets [hitWindowHours]uint32
+	buckets [hitBuckets]uint32
 
 	// failures is the number of consecutive failed refreshes.
 	failures uint8
@@ -52,20 +52,22 @@ func (e *entry) roll(now time.Time) {
 	}
 
 	e.hourIdx = hour
-	if delta >= hitWindowHours {
-		e.buckets = [hitWindowHours]uint32{}
+	if delta >= hitBuckets {
+		e.buckets = [hitBuckets]uint32{}
 		e.cur = 0
 
 		return
 	}
 
 	for range delta {
-		e.cur = (e.cur + 1) % hitWindowHours
+		e.cur = (e.cur + 1) % hitBuckets
 		e.buckets[e.cur] = 0
 	}
 }
 
-// hits returns the number of queries for e over the last 24 hours.
+// hits returns the number of queries for e over the last 24 hours, plus the
+// part of the hour before them that has passed.  Counting a bit more than 24
+// hours makes sure that no query is forgotten earlier.
 func (e *entry) hits(now time.Time) (n uint64) {
 	e.roll(now)
 	for _, b := range e.buckets {

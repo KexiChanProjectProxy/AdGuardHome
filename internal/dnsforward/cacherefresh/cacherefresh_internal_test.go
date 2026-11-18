@@ -200,6 +200,18 @@ func TestResponseTTL(t *testing.T) {
 			Hdr: dns.RR_Header{Name: "a.", Rrtype: dns.TypeSOA, Class: dns.ClassINET, Ttl: ttl},
 		}
 	}
+	newCNAME := func(ttl uint32) (rr dns.RR) {
+		return &dns.CNAME{
+			Hdr:    dns.RR_Header{Name: "a.", Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: ttl},
+			Target: "b.",
+		}
+	}
+	newNS := func(ttl uint32) (rr dns.RR) {
+		return &dns.NS{
+			Hdr: dns.RR_Header{Name: "a.", Rrtype: dns.TypeNS, Class: dns.ClassINET, Ttl: ttl},
+			Ns:  "ns.a.",
+		}
+	}
 	newResp := func(rcode int, ans, ns []dns.RR) (m *dns.Msg) {
 		req := (&dns.Msg{}).SetQuestion("a.", dns.TypeA)
 		m = (&dns.Msg{}).SetRcode(req, rcode)
@@ -238,7 +250,15 @@ func TestResponseTTL(t *testing.T) {
 		want: 0,
 	}, {
 		resp: truncated,
-		name: "truncated",
+		name: "truncated_ignored",
+		want: 10 * time.Second,
+	}, {
+		resp: newResp(dns.RcodeSuccess, []dns.RR{newCNAME(10)}, nil),
+		name: "dangling_cname",
+		want: 0,
+	}, {
+		resp: newResp(dns.RcodeNameError, nil, []dns.RR{newSOA(300), newNS(300)}),
+		name: "nxdomain_referral",
 		want: 0,
 	}, {
 		resp: nil,
@@ -267,7 +287,8 @@ func TestTracker_hits(t *testing.T) {
 	require.NotNil(t, e)
 
 	assert.Equal(t, uint64(2), e.hits(testStart.Add(time.Hour)))
-	assert.Equal(t, uint64(1), e.hits(testStart.Add(24*time.Hour+time.Minute)))
+	assert.Equal(t, uint64(2), e.hits(testStart.Add(24*time.Hour+59*time.Minute)))
+	assert.Equal(t, uint64(1), e.hits(testStart.Add(25*time.Hour)))
 	assert.Zero(t, e.hits(testStart.Add(26*time.Hour)))
 
 	tr.hit(newKey("b."), time.Minute, false, testStart)
@@ -528,11 +549,49 @@ func TestService_StartShutdown(t *testing.T) {
 	require.NoError(t, s.Start(context.Background()))
 	testutil.RequireReceive(t, started, testTimeout)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	defer cancel()
+	// Shutdown doesn't wait for the refresh, which ignores cancellation.
+	ctx := testutil.ContextWithTimeout(t, testTimeout)
+	assert.NoError(t, s.Shutdown(ctx))
+	assert.NoError(t, s.Shutdown(ctx))
 
-	// The refresher ignores cancellation, so waiting times out.
-	assert.Error(t, s.Shutdown(ctx))
+	// Shutting down a service that isn't started is a no-op.
+	assert.NoError(t, New(&Config{MaxConcurrent: 1, MaxTracked: 1}).Shutdown(ctx))
+}
+
+func TestService_panic(t *testing.T) {
+	clock := newTestClock()
+	r := newTestRefresher(func(_ Key, _ time.Duration) (time.Duration, bool, error) {
+		panic("test panic")
+	})
+	s := newTestService(t, &Config{Delay: 0}, clock, r)
+
+	k := newKey("a.")
+	s.Hit(k, time.Minute, false)
+
+	tickAndWait(s, clock.advance(time.Minute))
+	assert.Len(t, r.takeCalls(), 1)
+	assert.Equal(t, uint64(1), s.Counters().Failed)
+
+	// The entry isn't stuck in flight.
+	tickAndWait(s, clock.advance(backoffMax+backoffBase))
+	assert.Len(t, r.takeCalls(), 1)
+}
+
+func TestService_overdueFirst(t *testing.T) {
+	clock := newTestClock()
+	r := newTestRefresher(okRefresh(2 * time.Second))
+	s := newTestService(t, &Config{MaxConcurrent: 1, Delay: 0, PrefetchTop: 1}, clock, r)
+
+	hot, cold := newKey("hot."), newKey("cold.")
+	for range 10 {
+		s.Hit(hot, 2*time.Second, false)
+	}
+	s.Hit(cold, 500*time.Millisecond, false)
+
+	// The cold entry is due first, so it wins the only slot even though the
+	// hot one is due too.
+	tickAndWait(s, clock.advance(2*time.Second))
+	assert.Equal(t, []refreshCall{{key: cold, minRemaining: 0}}, r.takeCalls())
 }
 
 func TestTracker_cachedExpiry(t *testing.T) {
