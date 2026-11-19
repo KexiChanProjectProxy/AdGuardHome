@@ -2,6 +2,14 @@
 
 <!-- TODO(a.garipov): Reformat in accordance with the KeepAChangelog spec. -->
 
+## v0.107.81: API changes
+
+### Proactive DNS cache refresh
+
+- New properties `cache_refresh_enabled`, `cache_refresh_max_concurrent`, `cache_refresh_delay`, `cache_refresh_min_hits`, `cache_refresh_prefetch_top`, `cache_refresh_prefetch_before` and `cache_refresh_max_tracked` in `DNSConfig` used by `GET /control/dns_info` and `POST /control/dns_config`.  The durations are in seconds.
+
+- New property `cache_refresh` in `ServerStatus` returned by `GET /control/status` contains the counters of the proactive cache refresh.
+
 ## v0.107.79: API changes
 
 - Field `bootstrap_dns` in `POST /control/dns_config` now accepts comments.  A comment must start with the `#` symbol.

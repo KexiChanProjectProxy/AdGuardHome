@@ -19,7 +19,12 @@ vi.mock('panel/common/intl', () => ({
     default: { getMessage: vi.fn((key: string) => key) },
 }));
 
-import { getDnsConfig, dnsConfigState, toggleResolveClients } from 'panel/stores/dnsConfig';
+import {
+    getDnsConfig,
+    dnsConfigState,
+    toggleResolveClients,
+    toggleCacheRefreshEnabled,
+} from 'panel/stores/dnsConfig';
 
 describe('getDnsConfig', () => {
     beforeEach(() => vi.clearAllMocks());
@@ -59,6 +64,21 @@ describe('toggleResolveClients', () => {
         await toggleResolveClients();
         expect(mocks.dnsConfig).toHaveBeenCalledWith({
             resolve_clients: !before,
+        });
+    });
+});
+
+describe('toggleCacheRefreshEnabled', () => {
+    beforeEach(() => vi.clearAllMocks());
+
+    it('toggles cache_refresh_enabled and persists only that field', async () => {
+        mocks.dnsConfig.mockResolvedValue({});
+
+        const before = !!dnsConfigState.cache_refresh_enabled;
+        await toggleCacheRefreshEnabled();
+        expect(dnsConfigState.cache_refresh_enabled).toBe(!before);
+        expect(mocks.dnsConfig).toHaveBeenCalledWith({
+            cache_refresh_enabled: !before,
         });
     });
 });

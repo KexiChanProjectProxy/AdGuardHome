@@ -12,6 +12,7 @@ import (
 	"github.com/AdguardTeam/AdGuardHome/internal/aghhttp"
 	"github.com/AdguardTeam/AdGuardHome/internal/aghnet"
 	"github.com/AdguardTeam/AdGuardHome/internal/dnsforward"
+	"github.com/AdguardTeam/AdGuardHome/internal/dnsforward/cacherefresh"
 	"github.com/AdguardTeam/AdGuardHome/internal/version"
 	"github.com/AdguardTeam/golibs/httphdr"
 	"github.com/AdguardTeam/golibs/netutil"
@@ -96,7 +97,18 @@ func collectDNSAddresses(tlsMgr *tlsManager) (addrs []string, err error) {
 }
 
 // statusResponse is a response for /control/status endpoint.
+// cacheRefreshStatus is the status of the proactive DNS cache refresh.
+type cacheRefreshStatus struct {
+	cacherefresh.Counters
+
+	// Enabled is true if the proactive cache refresh is running.
+	Enabled bool `json:"enabled"`
+}
+
 type statusResponse struct {
+	// CacheRefresh is the status of the proactive DNS cache refresh.
+	CacheRefresh cacheRefreshStatus `json:"cache_refresh"`
+
 	Version  string   `json:"version"`
 	Language string   `json:"language"`
 	DNSAddrs []string `json:"dns_addresses"`
@@ -133,12 +145,14 @@ func (web *webAPI) handleStatus(w http.ResponseWriter, r *http.Request) {
 	var (
 		fltConf           *dnsforward.Config
 		protDisabledUntil *time.Time
+		cacheRefresh      cacheRefreshStatus
 		protEnabled       bool
 	)
 	if globalContext.dnsServer != nil {
 		fltConf = &dnsforward.Config{}
 		globalContext.dnsServer.WriteDiskConfig(fltConf)
 		protEnabled, protDisabledUntil = globalContext.dnsServer.UpdatedProtectionStatus(ctx)
+		cacheRefresh.Counters, cacheRefresh.Enabled = globalContext.dnsServer.CacheRefreshCounters()
 	}
 
 	var resp statusResponse
@@ -164,6 +178,7 @@ func (web *webAPI) handleStatus(w http.ResponseWriter, r *http.Request) {
 			StartTime:                  aghhttp.JSONTime(web.startTime),
 			ProtectionEnabled:          protEnabled,
 			IsRunning:                  isRunning(),
+			CacheRefresh:               cacheRefresh,
 		}
 	}()
 

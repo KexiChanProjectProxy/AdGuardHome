@@ -18,8 +18,8 @@ github.com/Azure/azure-sdk-for-go/sdk/internal v1.12.0 h1:fhqpLE3UEXi9lPaBRpQ6Xu
 github.com/Azure/azure-sdk-for-go/sdk/internal v1.12.0/go.mod h1:7dCRMLwisfRH3dBupKeNCioWYUZ4SS09Z14H+7i8ZoY=
 github.com/BurntSushi/toml v1.6.0 h1:dRaEfpa2VI55EwlIW72hMRHdWouJeRF7TPYhI+AUQjk=
 github.com/BurntSushi/toml v1.6.0/go.mod h1:ukJfTF/6rtPPRCnwkur4qwRxa8vTRFBF0uk2lLoLwho=
-github.com/KexiChanProjectProxy/dnsproxy v0.83.2-anytls.1 h1:XgiIFpZd+M+rw2g0onJxD738YMh2SlR/6dqX1K2e2Pg=
-github.com/KexiChanProjectProxy/dnsproxy v0.83.2-anytls.1/go.mod h1:O1K8Roc6lNhSB5ffBXx34Pw7/03b+HUNh6qIhR/ad2A=
+github.com/KexiChanProjectProxy/dnsproxy v0.83.2-anytls.1.cacherefresh.2 h1:Q1j31mqcdIgIoOYdKiMRz3p7jpe5EkJhJu6Gk95NX8A=
+github.com/KexiChanProjectProxy/dnsproxy v0.83.2-anytls.1.cacherefresh.2/go.mod h1:O1K8Roc6lNhSB5ffBXx34Pw7/03b+HUNh6qIhR/ad2A=
 github.com/KexiChanProjectProxy/sing-anytls v0.0.14-kexi.8 h1:tjgZrmV1OcACmC1W6a9eXI1cCRWUjvMo+4fHSlYNU60=
 github.com/KexiChanProjectProxy/sing-anytls v0.0.14-kexi.8/go.mod h1:7rjN6IukwysmdusYsrV51Fgu1uW6vsrdd6ctjnEAln8=
 github.com/Masterminds/semver/v3 v3.5.0 h1:kQceYJfbupGfZOKZQg0kou0DgAKhzDg2NZPAwZ/2OOE=

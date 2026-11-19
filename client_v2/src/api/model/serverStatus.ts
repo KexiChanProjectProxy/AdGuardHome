@@ -1,3 +1,4 @@
+import type { CacheRefreshStatus } from './cacheRefreshStatus';
 import type { Lang } from './lang';
 
 /**
@@ -23,4 +24,5 @@ export interface ServerStatus {
     language: Lang;
     /** Start time of the web API server (Unix time in milliseconds). */
     start_time?: number;
+    cache_refresh: CacheRefreshStatus;
 }

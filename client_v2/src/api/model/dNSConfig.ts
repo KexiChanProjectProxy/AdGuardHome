@@ -55,6 +55,40 @@ export interface DNSConfig {
      */
     cache_enabled?: boolean;
     cache_optimistic?: boolean;
+    /** Enables the proactive refresh of popular cache entries.  It only has effect when both `cache_enabled` and `cache_optimistic` are `true`. */
+    cache_refresh_enabled?: boolean;
+    /**
+     * Maximum number of simultaneous proactive refreshes.
+     * @minimum 1
+     * @maximum 1024
+     */
+    cache_refresh_max_concurrent?: number;
+    /**
+     * How long after its expiry a cache entry is refreshed, in seconds. Until then, the expired entry is served optimistically.  It must be less than the `dns.cache_optimistic_max_age` setting of the configuration file.
+     * @minimum 0
+     */
+    cache_refresh_delay?: number;
+    /**
+     * Only the cache entries queried more than this number of times in the last 24 hours are refreshed.
+     * @minimum 0
+     */
+    cache_refresh_min_hits?: number;
+    /**
+     * Number of the most queried cache entries that are refreshed before their expiry instead of after it.
+     * @minimum 0
+     */
+    cache_refresh_prefetch_top?: number;
+    /**
+     * How long before its expiry one of the most queried cache entries is refreshed, in seconds.  The window is limited to the half of the entry's TTL.
+     * @minimum 0
+     */
+    cache_refresh_prefetch_before?: number;
+    /**
+     * Maximum number of tracked cache keys.  The least recently queried keys are evicted beyond it.
+     * @minimum 1
+     * @maximum 100000
+     */
+    cache_refresh_max_tracked?: number;
     /** Upstream modes enumeration. The empty string value is deprecated; use `load_balance` instead. */
     upstream_mode?: DNSConfigUpstreamMode;
     use_private_ptr_resolvers?: boolean;

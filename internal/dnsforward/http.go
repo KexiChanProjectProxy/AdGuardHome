@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/netip"
 	"slices"
@@ -22,6 +23,7 @@ import (
 	"github.com/AdguardTeam/golibs/logutil/slogutil"
 	"github.com/AdguardTeam/golibs/netutil"
 	"github.com/AdguardTeam/golibs/stringutil"
+	"github.com/AdguardTeam/golibs/timeutil"
 	"github.com/AdguardTeam/golibs/validate"
 )
 
@@ -100,6 +102,33 @@ type jsonDNSConfig struct {
 	// CacheOptimistic defines if expired entries should be served.
 	CacheOptimistic *bool `json:"cache_optimistic"`
 
+	// CacheRefreshEnabled defines if popular cache entries should be refreshed
+	// proactively.
+	CacheRefreshEnabled *bool `json:"cache_refresh_enabled"`
+
+	// CacheRefreshMaxConcurrent is the maximum number of simultaneous
+	// proactive cache refreshes.
+	CacheRefreshMaxConcurrent *uint32 `json:"cache_refresh_max_concurrent"`
+
+	// CacheRefreshDelay is how long after its expiry a cache entry is
+	// refreshed, in seconds.
+	CacheRefreshDelay *uint32 `json:"cache_refresh_delay"`
+
+	// CacheRefreshMinHits is the number of queries in the last 24 hours that a
+	// cache entry must exceed to be refreshed.
+	CacheRefreshMinHits *uint32 `json:"cache_refresh_min_hits"`
+
+	// CacheRefreshPrefetchTop is the number of the most queried cache entries
+	// that are refreshed before their expiry.
+	CacheRefreshPrefetchTop *uint32 `json:"cache_refresh_prefetch_top"`
+
+	// CacheRefreshPrefetchBefore is how long before its expiry one of the most
+	// queried cache entries is refreshed, in seconds.
+	CacheRefreshPrefetchBefore *uint32 `json:"cache_refresh_prefetch_before"`
+
+	// CacheRefreshMaxTracked is the maximum number of tracked cache keys.
+	CacheRefreshMaxTracked *uint32 `json:"cache_refresh_max_tracked"`
+
 	// ResolveClients defines if clients IPs should be resolved into hostnames.
 	ResolveClients *bool `json:"resolve_clients"`
 
@@ -171,6 +200,13 @@ func (s *Server) getDNSConfig(ctx context.Context) (c *jsonDNSConfig) {
 	cacheMinTTL := s.conf.CacheMinTTL
 	cacheMaxTTL := s.conf.CacheMaxTTL
 	cacheOptimistic := s.conf.CacheOptimistic
+	cacheRefreshEnabled := s.conf.CacheRefreshEnabled
+	cacheRefreshMaxConcurrent := s.conf.CacheRefreshMaxConcurrent
+	cacheRefreshDelay := durationToSeconds(s.conf.CacheRefreshDelay)
+	cacheRefreshMinHits := s.conf.CacheRefreshMinHits
+	cacheRefreshPrefetchTop := s.conf.CacheRefreshPrefetchTop
+	cacheRefreshPrefetchBefore := durationToSeconds(s.conf.CacheRefreshPrefetchBefore)
+	cacheRefreshMaxTracked := s.conf.CacheRefreshMaxTracked
 	resolveClients := s.conf.AddrProcConf.UseRDNS
 	usePrivateRDNS := s.conf.UsePrivateRDNS
 	localPTRUpstreams := stringutil.CloneSliceOrEmpty(s.conf.LocalPTRResolvers)
@@ -193,36 +229,43 @@ func (s *Server) getDNSConfig(ctx context.Context) (c *jsonDNSConfig) {
 	}
 
 	return &jsonDNSConfig{
-		Upstreams:                &upstreams,
-		UpstreamsFile:            &upstreamFile,
-		Bootstraps:               &bootstraps,
-		Fallbacks:                &fallbacks,
-		ProtectionEnabled:        &protectionEnabled,
-		BlockingMode:             &blockingMode,
-		BlockingIPv4:             blockingIPv4,
-		BlockingIPv6:             blockingIPv6,
-		Ratelimit:                &ratelimit,
-		RatelimitSubnetLenIPv4:   &ratelimitSubnetLenIPv4,
-		RatelimitSubnetLenIPv6:   &ratelimitSubnetLenIPv6,
-		RatelimitWhitelist:       &ratelimitWhitelist,
-		UpstreamTimeout:          &upstreamTimeout,
-		EDNSCSCustomIP:           customIP,
-		EDNSCSEnabled:            &enableEDNSClientSubnet,
-		EDNSCSUseCustom:          &useCustom,
-		DNSSECEnabled:            &enableDNSSEC,
-		DisableIPv6:              &aaaaDisabled,
-		BlockedResponseTTL:       &blockedResponseTTL,
-		CacheEnabled:             &cacheEnabled,
-		CacheSize:                &cacheSize,
-		CacheMinTTL:              &cacheMinTTL,
-		CacheMaxTTL:              &cacheMaxTTL,
-		CacheOptimistic:          &cacheOptimistic,
-		UpstreamMode:             &upstreamMode,
-		ResolveClients:           &resolveClients,
-		UsePrivateRDNS:           &usePrivateRDNS,
-		LocalPTRUpstreams:        &localPTRUpstreams,
-		DefaultLocalPTRUpstreams: defPTRUps,
-		DisabledUntil:            protectionDisabledUntil,
+		Upstreams:                  &upstreams,
+		UpstreamsFile:              &upstreamFile,
+		Bootstraps:                 &bootstraps,
+		Fallbacks:                  &fallbacks,
+		ProtectionEnabled:          &protectionEnabled,
+		BlockingMode:               &blockingMode,
+		BlockingIPv4:               blockingIPv4,
+		BlockingIPv6:               blockingIPv6,
+		Ratelimit:                  &ratelimit,
+		RatelimitSubnetLenIPv4:     &ratelimitSubnetLenIPv4,
+		RatelimitSubnetLenIPv6:     &ratelimitSubnetLenIPv6,
+		RatelimitWhitelist:         &ratelimitWhitelist,
+		UpstreamTimeout:            &upstreamTimeout,
+		EDNSCSCustomIP:             customIP,
+		EDNSCSEnabled:              &enableEDNSClientSubnet,
+		EDNSCSUseCustom:            &useCustom,
+		DNSSECEnabled:              &enableDNSSEC,
+		DisableIPv6:                &aaaaDisabled,
+		BlockedResponseTTL:         &blockedResponseTTL,
+		CacheEnabled:               &cacheEnabled,
+		CacheSize:                  &cacheSize,
+		CacheMinTTL:                &cacheMinTTL,
+		CacheMaxTTL:                &cacheMaxTTL,
+		CacheOptimistic:            &cacheOptimistic,
+		CacheRefreshEnabled:        &cacheRefreshEnabled,
+		CacheRefreshMaxConcurrent:  &cacheRefreshMaxConcurrent,
+		CacheRefreshDelay:          &cacheRefreshDelay,
+		CacheRefreshMinHits:        &cacheRefreshMinHits,
+		CacheRefreshPrefetchTop:    &cacheRefreshPrefetchTop,
+		CacheRefreshPrefetchBefore: &cacheRefreshPrefetchBefore,
+		CacheRefreshMaxTracked:     &cacheRefreshMaxTracked,
+		UpstreamMode:               &upstreamMode,
+		ResolveClients:             &resolveClients,
+		UsePrivateRDNS:             &usePrivateRDNS,
+		LocalPTRUpstreams:          &localPTRUpstreams,
+		DefaultLocalPTRUpstreams:   defPTRUps,
+		DisabledUntil:              protectionDisabledUntil,
 	}
 }
 
@@ -289,7 +332,7 @@ func (req *jsonDNSConfig) validate(
 	ownAddrs addrPortSet,
 	sysResolvers SystemResolvers,
 	privateNets netutil.SubnetSet,
-	curCacheSize uint32,
+	cur *Config,
 ) (err error) {
 	defer func() { err = errors.Annotate(err, "validating dns config: %w") }()
 
@@ -317,7 +360,7 @@ func (req *jsonDNSConfig) validate(
 		return err
 	}
 
-	err = req.validateCacheSettings(curCacheSize)
+	err = req.validateCacheSettings(cur)
 	if err != nil {
 		// Don't wrap the error since it's informative enough as is.
 		return err
@@ -447,8 +490,15 @@ func (req *jsonDNSConfig) validateUpstreamDNSServers(
 }
 
 // validateCacheSettings returns an error if the cache configuration is invalid.
-func (req *jsonDNSConfig) validateCacheSettings(curCacheSize uint32) (err error) {
-	err = req.validateCacheSize(curCacheSize)
+// cur is the current configuration, it must not be nil.
+func (req *jsonDNSConfig) validateCacheSettings(cur *Config) (err error) {
+	err = req.validateCacheSize(cur.CacheSize)
+	if err != nil {
+		// Don't wrap the error because it's informative enough as is.
+		return err
+	}
+
+	err = req.validateCacheRefresh(cur)
 	if err != nil {
 		// Don't wrap the error because it's informative enough as is.
 		return err
@@ -468,6 +518,36 @@ func (req *jsonDNSConfig) validateCacheSettings(curCacheSize uint32) (err error)
 	}
 
 	return validateCacheTTL(minTTL, maxTTL)
+}
+
+// validateCacheRefresh returns an error if the proactive cache refresh
+// settings resulting from applying req to cur are invalid.  Fields that req
+// doesn't change are validated too, so that the server isn't reconfigured into
+// an invalid state.  cur must not be nil.
+func (req *jsonDNSConfig) validateCacheRefresh(cur *Config) (err error) {
+	conf := &Config{
+		CacheRefreshEnabled:        cur.CacheRefreshEnabled,
+		CacheRefreshMaxConcurrent:  cur.CacheRefreshMaxConcurrent,
+		CacheRefreshDelay:          cur.CacheRefreshDelay,
+		CacheRefreshPrefetchBefore: cur.CacheRefreshPrefetchBefore,
+		CacheRefreshMaxTracked:     cur.CacheRefreshMaxTracked,
+		CacheOptimisticMaxAge:      cur.CacheOptimisticMaxAge,
+	}
+
+	setIfNotNil(&conf.CacheRefreshEnabled, req.CacheRefreshEnabled)
+	setIfNotNil(&conf.CacheRefreshMaxConcurrent, req.CacheRefreshMaxConcurrent)
+	setDurationIfNotNil(&conf.CacheRefreshDelay, req.CacheRefreshDelay)
+	setDurationIfNotNil(&conf.CacheRefreshPrefetchBefore, req.CacheRefreshPrefetchBefore)
+	setIfNotNil(&conf.CacheRefreshMaxTracked, req.CacheRefreshMaxTracked)
+
+	// Validate the values sent even when the refresh stays disabled, so that
+	// it can't be enabled later with them.
+	conf.CacheRefreshEnabled = conf.CacheRefreshEnabled ||
+		req.CacheRefreshMaxConcurrent != nil ||
+		req.CacheRefreshMaxTracked != nil ||
+		req.CacheRefreshDelay != nil
+
+	return validateCacheRefresh(conf)
 }
 
 // validateCacheSize returns an error if the cache size configuration is
@@ -566,7 +646,7 @@ func (s *Server) handleSetConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = req.validate(ctx, s.logger, ourAddrs, s.sysResolvers, s.privateNets, s.conf.CacheSize)
+	err = req.validate(ctx, s.logger, ourAddrs, s.sysResolvers, s.privateNets, &s.conf.Config)
 	if err != nil {
 		aghhttp.ErrorAndLog(ctx, l, r, w, http.StatusBadRequest, "%s", err)
 
@@ -644,6 +724,25 @@ func setIfNotNil[T any](currentPtr, newPtr *T) (hasSet bool) {
 	return true
 }
 
+// setDurationIfNotNil sets the value pointed by currentPtr to the number of
+// seconds pointed by newPtr if newPtr is not nil.  hasSet is true if the value
+// has been set.
+func setDurationIfNotNil(currentPtr *timeutil.Duration, newPtr *uint32) (hasSet bool) {
+	if newPtr == nil {
+		return false
+	}
+
+	*currentPtr = timeutil.Duration(time.Duration(*newPtr) * time.Second)
+
+	return true
+}
+
+// durationToSeconds returns the whole number of seconds in d, clamped to the
+// uint32 range.
+func durationToSeconds(d timeutil.Duration) (sec uint32) {
+	return uint32(min(max(time.Duration(d)/time.Second, 0), math.MaxUint32))
+}
+
 // setConfigRestartable sets the parameters which trigger a restart.
 // shouldRestart is true if the server should be restarted to apply changes.
 // s.serverLock is expected to be locked.
@@ -664,6 +763,13 @@ func (s *Server) setConfigRestartable(dc *jsonDNSConfig) (shouldRestart bool) {
 		setIfNotNil(&s.conf.CacheMinTTL, dc.CacheMinTTL),
 		setIfNotNil(&s.conf.CacheMaxTTL, dc.CacheMaxTTL),
 		setIfNotNil(&s.conf.CacheOptimistic, dc.CacheOptimistic),
+		setIfNotNil(&s.conf.CacheRefreshEnabled, dc.CacheRefreshEnabled),
+		setIfNotNil(&s.conf.CacheRefreshMaxConcurrent, dc.CacheRefreshMaxConcurrent),
+		setDurationIfNotNil(&s.conf.CacheRefreshDelay, dc.CacheRefreshDelay),
+		setIfNotNil(&s.conf.CacheRefreshMinHits, dc.CacheRefreshMinHits),
+		setIfNotNil(&s.conf.CacheRefreshPrefetchTop, dc.CacheRefreshPrefetchTop),
+		setDurationIfNotNil(&s.conf.CacheRefreshPrefetchBefore, dc.CacheRefreshPrefetchBefore),
+		setIfNotNil(&s.conf.CacheRefreshMaxTracked, dc.CacheRefreshMaxTracked),
 		setIfNotNil(&s.conf.AddrProcConf.UseRDNS, dc.ResolveClients),
 		setIfNotNil(&s.conf.UsePrivateRDNS, dc.UsePrivateRDNS),
 		setIfNotNil(&s.conf.RatelimitSubnetLenIPv4, dc.RatelimitSubnetLenIPv4),
@@ -764,6 +870,7 @@ func (s *Server) handleTestUpstreamDNS(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleCacheClear(w http.ResponseWriter, _ *http.Request) {
 	s.dnsProxy.ClearCache()
 	s.conf.ClientsContainer.ClearUpstreamCache()
+	s.clearCacheRefresh()
 
 	_, _ = io.WriteString(w, "OK")
 }

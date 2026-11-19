@@ -151,6 +151,11 @@ func TestDNSForwardHTTP_handleGetConfig(t *testing.T) {
 	}
 }
 
+// wantCacheRefreshLimitsErr is the error for zero cache refresh limits.
+const wantCacheRefreshLimitsErr = "validating dns config: invalid cache refresh settings: " +
+	"cache_refresh_max_concurrent: out of range: must be no less than 1, got 0\n" +
+	"cache_refresh_max_tracked: out of range: must be no less than 1, got 0"
+
 func TestDNSForwardHTTP_handleSetConfig(t *testing.T) {
 	filterConf := &filtering.Config{
 		ProtectionEnabled:     true,
@@ -252,6 +257,19 @@ func TestDNSForwardHTTP_handleSetConfig(t *testing.T) {
 	}, {
 		name:    "cache_bad_ttl",
 		wantSet: `validating dns config: cache_ttl_min must be less than or equal to cache_ttl_max`,
+	}, {
+		name:    "cache_refresh_good",
+		wantSet: "",
+	}, {
+		name:    "cache_refresh_bad_max_concurrent",
+		wantSet: wantCacheRefreshLimitsErr,
+	}, {
+		name:    "cache_refresh_enable_only",
+		wantSet: wantCacheRefreshLimitsErr,
+	}, {
+		name: "cache_refresh_bad_delay",
+		wantSet: "validating dns config: invalid cache refresh settings: " +
+			"cache_refresh_delay 12h must be less than cache_optimistic_max_age 12h",
 	}, {
 		name:    "upstream_mode_bad",
 		wantSet: `validating dns config: upstream_mode: incorrect value "somethingelse"`,

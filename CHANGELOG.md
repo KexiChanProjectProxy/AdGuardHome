@@ -17,6 +17,37 @@ See also the [v0.107.81 GitHub milestone][ms-v0.107.81].
 
 NOTE: Add new changes BELOW THIS COMMENT.
 -->
+
+### Added
+
+- Proactive refreshing of popular DNS cache entries when the optimistic cache is enabled.  The most queried entries are refreshed shortly before they expire, and other entries queried often enough are refreshed shortly after, with a limit on simultaneous refreshes and a backoff for failing ones.
+
+#### Configuration changes
+
+In this release, the schema version has changed from 34 to 35.
+
+- Added the properties `dns.cache_refresh_enabled`, `dns.cache_refresh_max_concurrent`, `dns.cache_refresh_delay`, `dns.cache_refresh_min_hits`, `dns.cache_refresh_prefetch_top`, `dns.cache_refresh_prefetch_before` and `dns.cache_refresh_max_tracked`.
+
+    ```yaml
+    # BEFORE:
+    'dns':
+      # …
+      'cache_optimistic_max_age': '12h'
+
+    # AFTER:
+    'dns':
+      # …
+      'cache_optimistic_max_age': '12h'
+      'cache_refresh_enabled': false
+      'cache_refresh_max_concurrent': 4
+      'cache_refresh_delay': '1s'
+      'cache_refresh_min_hits': 3
+      'cache_refresh_prefetch_top': 100
+      'cache_refresh_prefetch_before': '10s'
+      'cache_refresh_max_tracked': 10000
+    ```
+
+    To roll back this change, remove these properties and change the `schema_version` back to `34`.
 <!--
 NOTE: Add new changes ABOVE THIS COMMENT.
 -->

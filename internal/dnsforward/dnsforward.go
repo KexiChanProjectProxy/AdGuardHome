@@ -21,6 +21,7 @@ import (
 	"github.com/AdguardTeam/AdGuardHome/internal/aghslog"
 	"github.com/AdguardTeam/AdGuardHome/internal/aghtls"
 	"github.com/AdguardTeam/AdGuardHome/internal/client"
+	"github.com/AdguardTeam/AdGuardHome/internal/dnsforward/cacherefresh"
 	"github.com/AdguardTeam/AdGuardHome/internal/filtering"
 	"github.com/AdguardTeam/AdGuardHome/internal/querylog"
 	"github.com/AdguardTeam/AdGuardHome/internal/rdns"
@@ -149,6 +150,12 @@ type Server struct {
 
 	// dnsProxy is the DNS proxy for forwarding client's DNS requests.
 	dnsProxy *proxy.Proxy
+
+	// cacheRefresh proactively refreshes popular entries of the cache of
+	// dnsProxy.  It's nil when the proactive refresh is disabled.  It's an
+	// atomic pointer, since it's used by the request handlers that may outlive
+	// the proxy they were started by.
+	cacheRefresh atomic.Pointer[cacherefresh.Service]
 
 	// internalProxy resolves internal requests from the application itself.  It
 	// isn't started and so no listen ports are required.
@@ -286,6 +293,7 @@ func (s *Server) Close(ctx context.Context) {
 	s.stats = nil
 	s.queryLog = nil
 	s.dnsProxy = nil
+	s.shutdownCacheRefresh(ctx)
 
 	if err := s.ipset.close(); err != nil {
 		s.logger.ErrorContext(ctx, "closing ipset", slogutil.KeyError, err)
@@ -473,11 +481,28 @@ func (s *Server) Start(ctx context.Context) error {
 // to be locked.
 func (s *Server) startLocked(ctx context.Context) error {
 	err := s.dnsProxy.Start(ctx)
-	if err == nil {
-		s.isRunning = true
+	if err != nil {
+		return err
 	}
 
-	return err
+	s.isRunning = true
+
+	cr := s.cacheRefresh.Load()
+	if cr == nil {
+		// The previous service has been shut down by a stop, so create a new
+		// one for the restarted proxy.
+		cr = s.newCacheRefresh(ctx, s.dnsProxy)
+		s.cacheRefresh.Store(cr)
+	}
+
+	if cr != nil {
+		err = cr.Start(ctx)
+		if err != nil {
+			return fmt.Errorf("starting cache refresh: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // Prepare initializes parameters of s using data from conf.  It can be called
@@ -530,6 +555,7 @@ func (s *Server) Prepare(ctx context.Context, conf *ServerConfig) (err error) {
 	}
 
 	s.dnsProxy = dnsProxy
+	s.cacheRefresh.Store(s.newCacheRefresh(ctx, dnsProxy))
 
 	s.setupAddrProc()
 
@@ -795,6 +821,9 @@ func (s *Server) stopLocked(ctx context.Context) {
 	// TODO(e.burkov, a.garipov):  Return critical errors, not just log them.
 	// This will require filtering all the non-critical errors in
 	// [upstream.Upstream] implementations.
+
+	// Stop the refreshes before the upstreams they use are closed.
+	s.shutdownCacheRefresh(ctx)
 
 	if s.dnsProxy != nil {
 		err := s.dnsProxy.Shutdown(ctx)
