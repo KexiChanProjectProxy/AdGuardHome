@@ -20,8 +20,8 @@ github.com/BurntSushi/toml v1.6.0 h1:dRaEfpa2VI55EwlIW72hMRHdWouJeRF7TPYhI+AUQjk
 github.com/BurntSushi/toml v1.6.0/go.mod h1:ukJfTF/6rtPPRCnwkur4qwRxa8vTRFBF0uk2lLoLwho=
 github.com/KexiChanProjectProxy/dnsproxy v0.83.2-anytls.1.cacherefresh.3 h1:7cRCi9wPqaLDXgWq+ZtePtfh0X6Hz1MoogPLe4XpQF4=
 github.com/KexiChanProjectProxy/dnsproxy v0.83.2-anytls.1.cacherefresh.3/go.mod h1:O1K8Roc6lNhSB5ffBXx34Pw7/03b+HUNh6qIhR/ad2A=
-github.com/KexiChanProjectProxy/sing-anytls v0.0.14-kexi.11 h1:BDfrUHu8MrgI6RQkvIqXzLyHcJmHBMwttO03gj62sSQ=
-github.com/KexiChanProjectProxy/sing-anytls v0.0.14-kexi.11/go.mod h1:FxSh4nniy8Lv5I7gBboDVE0v8lp7hpqnnBNYZSqZZL8=
+github.com/KexiChanProjectProxy/sing-anytls v0.0.14-kexi.12 h1:t/hNCfty+A6hzPB5ldL6zLF1iIPq5lXxQHA/odsJtDg=
+github.com/KexiChanProjectProxy/sing-anytls v0.0.14-kexi.12/go.mod h1:FxSh4nniy8Lv5I7gBboDVE0v8lp7hpqnnBNYZSqZZL8=
 github.com/Masterminds/semver/v3 v3.5.0 h1:kQceYJfbupGfZOKZQg0kou0DgAKhzDg2NZPAwZ/2OOE=
 github.com/Masterminds/semver/v3 v3.5.0/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
 github.com/NYTimes/gziphandler v1.1.1 h1:ZUDjpQae29j0ryrS0u/B8HZfJBtBQHjqw2rQ2cqUQ3I=
