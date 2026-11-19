@@ -160,5 +160,5 @@ godebug multipathtcp=0
 // AnyTLS upstreams, see internal/anytlsupstream.
 replace (
 	github.com/AdguardTeam/dnsproxy => github.com/KexiChanProjectProxy/dnsproxy v0.83.2-anytls.1.cacherefresh.3
-	github.com/anytls/sing-anytls => github.com/KexiChanProjectProxy/sing-anytls v0.0.14-kexi.11
+	github.com/anytls/sing-anytls => github.com/KexiChanProjectProxy/sing-anytls v0.0.14-kexi.12
 )
