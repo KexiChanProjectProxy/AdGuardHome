@@ -246,3 +246,18 @@ func TestPoolSharing(t *testing.T) {
 	assert.Nil(t, pa.closeTimer)
 	poolsMu.Unlock()
 }
+
+func TestUpstream_HasIdleConn(t *testing.T) {
+	t.Parallel()
+
+	addr, _ := startServer(t, answerA)
+	u := newTestUpstream(t, "anytls://"+testPassword+"@"+addr+"?insecure=1")
+
+	checker, ok := u.(upstream.IdleConnChecker)
+	require.True(t, ok)
+	assert.False(t, checker.HasIdleConn())
+
+	_, err := exchangeA(t, u)
+	require.NoError(t, err)
+	assert.True(t, checker.HasIdleConn())
+}
