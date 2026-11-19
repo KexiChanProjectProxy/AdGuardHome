@@ -101,6 +101,16 @@ func (u *Upstream) Exchange(req *dns.Msg) (resp *dns.Msg, err error) {
 	return resp, nil
 }
 
+var _ upstream.IdleConnChecker = (*Upstream)(nil)
+
+// HasIdleConn implements the [upstream.IdleConnChecker] interface for
+// *Upstream.  It reports whether an established idle AnyTLS session can take a
+// query right away, which the proactive cache refresh prefers, by design, over
+// upstreams that would have to dial.
+func (u *Upstream) HasIdleConn() (ok bool) {
+	return u.pool.client.HasIdleDNSSession()
+}
+
 // Close implements the [upstream.Upstream] interface for *Upstream.  The
 // shared AnyTLS client is closed shortly after its last upstream.
 func (u *Upstream) Close() (err error) {
