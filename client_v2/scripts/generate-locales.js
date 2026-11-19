@@ -19,6 +19,8 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import * as prettier from 'prettier';
+
 // --- Configuration ---
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -29,10 +31,16 @@ const TWOSKY_PATH = resolve(REPO_ROOT, '.twosky.json');
 // Useful for CI checks that want to generate to a temp file.
 const args = process.argv.slice(2);
 const outFlagIdx = args.indexOf('--out');
+const DEFAULT_OUTPUT_PATH = resolve(
+    __dirname,
+    '..',
+    'src',
+    'common',
+    'intl',
+    'locales.generated.ts',
+);
 const OUTPUT_PATH =
-    outFlagIdx !== -1 && args[outFlagIdx + 1]
-        ? resolve(args[outFlagIdx + 1])
-        : resolve(__dirname, '..', 'src', 'common', 'intl', 'locales.generated.ts');
+    outFlagIdx !== -1 && args[outFlagIdx + 1] ? resolve(args[outFlagIdx + 1]) : DEFAULT_OUTPUT_PATH;
 
 // --- Helpers ---
 
@@ -120,7 +128,16 @@ try {
     lines.push('};');
     lines.push('');
 
-    writeFileSync(OUTPUT_PATH, lines.join('\n') + '\n', 'utf-8');
+    // Format the output the way the committed file is formatted, with the
+    // project's Prettier configuration, no matter where it is written to, so
+    // that `npm run locales:check` can compare the two byte for byte.
+    const prettierConfig = (await prettier.resolveConfig(DEFAULT_OUTPUT_PATH)) ?? {};
+    const formatted = await prettier.format(lines.join('\n') + '\n', {
+        ...prettierConfig,
+        filepath: DEFAULT_OUTPUT_PATH,
+    });
+
+    writeFileSync(OUTPUT_PATH, formatted, 'utf-8');
 
     console.log(`Wrote ${OUTPUT_PATH} (${allCodes.length} locales)`);
 } catch (err) {
